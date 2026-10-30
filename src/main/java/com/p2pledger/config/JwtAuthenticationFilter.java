@@ -10,13 +10,18 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Collections;
 
-@Component
+/**
+ * NOTE: This class intentionally does NOT have @Component.
+ * It is registered exactly once via SecurityConfig.addFilterBefore().
+ * Adding @Component would cause Spring Boot to also register it as a
+ * plain servlet filter, running it twice and clearing the SecurityContext
+ * on the second pass — which causes 403 on POST/PATCH/GET requests.
+ */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;

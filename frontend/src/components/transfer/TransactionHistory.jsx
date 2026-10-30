@@ -30,7 +30,8 @@ const TransactionHistory = ({ onTransferSelect }) => {
             setTotalPages(response.data.totalPages);
             setPage(page);
         } catch (error) {
-            setError('Failed to fetch transaction history');
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch transaction history';
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -93,7 +94,7 @@ const TransactionHistory = ({ onTransferSelect }) => {
                                 onClick={() => onTransferSelect?.(transfer)}
                             >
                                 <div className="transfer-amount">
-                                    {transfer.type === 'DEBIT' ? '-' : '+'}₹{transfer.amount.toFixed(2)}
+                                    {transfer.type === 'DEBIT' ? '-' : '+'}₹{parseFloat(transfer.amount).toFixed(2)}
                                 </div>
                                 <div className="transfer-details">
                                     <div className="counterparty-info">

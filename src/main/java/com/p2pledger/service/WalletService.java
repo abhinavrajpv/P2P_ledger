@@ -53,6 +53,7 @@ public class WalletService {
                 .balanceBefore(oldBalance)
                 .balanceAfter(newBalance)
                 .referenceId(reference)
+                .createdAt(java.time.LocalDateTime.now())
                 .build();
         ledgerEntryRepository.save(ledgerEntry);
 

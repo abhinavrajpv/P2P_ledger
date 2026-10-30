@@ -21,7 +21,7 @@ const ReconciliationReport = () => {
             });
             setReports(response.data);
         } catch (error) {
-            console.error('Failed to fetch reconciliation report');
+            console.error('Failed to fetch reconciliation report:', error.response?.data?.message || error.message);
         } finally {
             setLoading(false);
         }

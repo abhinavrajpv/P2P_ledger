@@ -16,7 +16,8 @@ const DashboardStats = () => {
             });
             setStats(response.data);
         } catch (error) {
-            setError('Failed to fetch dashboard statistics');
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch dashboard statistics';
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }

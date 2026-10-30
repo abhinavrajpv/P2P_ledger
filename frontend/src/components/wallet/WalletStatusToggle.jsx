@@ -15,7 +15,8 @@ const WalletStatusToggle = () => {
             });
             setCurrentStatus(response.data.status);
         } catch (error) {
-            setMessage('Failed to fetch wallet status');
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch wallet status';
+            setMessage(`Failed to fetch wallet status: ${errorMessage}`);
         }
     };
 
@@ -36,7 +37,8 @@ const WalletStatusToggle = () => {
             setCurrentStatus(newStatus);
             setNewStatus('');
         } catch (error) {
-            setMessage(`Failed to update status: ${error.response?.data?.message || 'Unknown error'}`);
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to update status';
+            setMessage(`Failed to update status: ${errorMessage}`);
         } finally {
             setLoading(false);
         }

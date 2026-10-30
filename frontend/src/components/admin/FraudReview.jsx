@@ -21,7 +21,7 @@ const FraudReview = () => {
             setTotalPages(response.data.totalPages);
             setPage(page);
         } catch (error) {
-            console.error('Failed to fetch fraud alerts');
+            console.error('Failed to fetch fraud alerts:', error.response?.data?.message || error.message);
         } finally {
             setLoading(false);
         }
@@ -44,7 +44,7 @@ const FraudReview = () => {
             });
             fetchAlerts(page);
         } catch (error) {
-            console.error(`Failed to ${actionType} fraud alert`);
+            console.error(`Failed to ${actionType} fraud alert:`, error.response?.data?.message || error.message);
         } finally {
             setProcessingId(null);
             setAction(null);

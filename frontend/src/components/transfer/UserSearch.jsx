@@ -29,7 +29,8 @@ const UserSearch = ({ onUserSelect }) => {
             });
             setResults(response.data);
         } catch (error) {
-            setError('Failed to search users');
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to search users';
+            setError(errorMessage);
             setResults([]);
         } finally {
             setLoading(false);

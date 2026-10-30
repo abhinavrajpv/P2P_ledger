@@ -7,16 +7,14 @@ const AuthContainer = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [loginSuccess, setLoginSuccess] = useState(false);
     const [message, setMessage] = useState('');
-    const [userRole, setUserRole] = useState(null);
     const navigate = useNavigate();
 
     const handleLogin = (user, token) => {
         localStorage.setItem('token', token);
         localStorage.setItem('userId', user.id.toString());
         localStorage.setItem('user', JSON.stringify(user));
-        setUserRole(user.role);
-        setLoginSuccess(true);
         setMessage('Login successful!');
+        setLoginSuccess(true);
     };
 
     const handleRegister = (message, user) => {
@@ -26,7 +24,6 @@ const AuthContainer = () => {
             localStorage.setItem('token', localStorage.getItem('token'));
             localStorage.setItem('userId', user.id.toString());
             localStorage.setItem('user', JSON.stringify(user));
-            setUserRole(user.role);
             setLoginSuccess(true);
         }
     };
@@ -40,19 +37,23 @@ const AuthContainer = () => {
         localStorage.removeItem('user');
         setLoginSuccess(false);
         setMessage('Logged out successfully');
-        setUserRole(null);
         navigate('/login');
     };
 
+    // Navigate after successful login
     useEffect(() => {
-        if (loginSuccess && userRole) {
-            if (userRole === 'ADMIN') {
-                navigate('/admin');
-            } else {
-                navigate('/wallet');
+        if (loginSuccess) {
+            const storedUser = localStorage.getItem('user');
+            if (storedUser) {
+                const user = JSON.parse(storedUser);
+                if (user.role === 'ADMIN') {
+                    navigate('/admin');
+                } else {
+                    navigate('/wallet');
+                }
             }
         }
-    }, [loginSuccess, userRole, navigate]);
+    }, [loginSuccess, navigate]);
 
     return (
         <div className="auth-container">
@@ -71,22 +72,22 @@ const AuthContainer = () => {
                 </button>
             </div>
             
-            {isLogin ? (
-                <LoginForm onLogin={handleLogin} onError={handleError} />
-            ) : (
-                <RegisterForm onRegister={handleRegister} onError={handleError} />
-            )}
-
-            {message && <div className={`message ${message.includes('successful') || message.includes('Welcome') ? 'success' : 'error'}`}>{message}</div>}
-            
-            {loginSuccess && (
-                <div className="auth-container">
-                    <div className="success-message">
-                        <h2>Welcome back!</h2>
-                        <p>{message}</p>
-                        <button onClick={handleLogout}>Logout</button>
-                    </div>
+            {loginSuccess ? (
+                <div className="success-message">
+                    <h2>Welcome back!</h2>
+                    <p>{message}</p>
+                    <button onClick={handleLogout}>Logout</button>
                 </div>
+            ) : (
+                <>
+                    {isLogin ? (
+                        <LoginForm onLogin={handleLogin} onError={handleError} />
+                    ) : (
+                        <RegisterForm onRegister={handleRegister} onError={handleError} />
+                    )}
+
+                    {message && <div className={`message ${message.includes('successful') || message.includes('Welcome') ? 'success' : 'error'}`}>{message}</div>}
+                </>
             )}
         </div>
     );

@@ -21,7 +21,8 @@ const MaskingToggle = () => {
             setMessage('Masking status refreshed successfully');
             setMessageType('success');
         } catch (error) {
-            setMessage('Failed to fetch masking status');
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch masking status';
+            setMessage(`Failed to fetch masking status: ${errorMessage}`);
             setMessageType('error');
         } finally {
             setLoading(false);
@@ -54,7 +55,8 @@ const MaskingToggle = () => {
             setMessageType('success');
             setPin('');
         } catch (error) {
-            setMessage(`Failed to ${enable ? 'enable' : 'disable'} masking: ${error.response?.data?.message || 'Invalid PIN'}`);
+            const errorMessage = error.response?.data?.message || error.message || `Failed to ${enable ? 'enable' : 'disable'} masking`;
+            setMessage(`Failed to ${enable ? 'enable' : 'disable'} masking: ${errorMessage}`);
             setMessageType('error');
         } finally {
             setLoading(false);

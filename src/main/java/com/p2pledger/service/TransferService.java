@@ -124,6 +124,7 @@ public class TransferService {
                 .amount(amount)
                 .balanceBefore(senderOldBalance)
                 .balanceAfter(senderNewBalance)
+                .createdAt(java.time.LocalDateTime.now())
                 .build();
         ledgerEntryRepository.save(senderLedgerEntry);
 
@@ -198,6 +199,7 @@ public class TransferService {
                 .amount(amount)
                 .balanceBefore(receiverOldBalance)
                 .balanceAfter(receiverNewBalance)
+                .createdAt(java.time.LocalDateTime.now())
                 .build();
         ledgerEntryRepository.save(receiverLedgerEntry);
 
@@ -255,6 +257,7 @@ public class TransferService {
                 .amount(amount)
                 .balanceBefore(senderOldBalance)
                 .balanceAfter(senderNewBalance)
+                .createdAt(java.time.LocalDateTime.now())
                 .build();
         ledgerEntryRepository.save(refundLedgerEntry);
 
@@ -304,10 +307,14 @@ public class TransferService {
             User receiver = userRepository.findById(transfer.getReceiverId())
                     .orElse(new User());
             
+            // Determine type from the perspective of userId
+            String transferType = transfer.getSenderId().equals(userId) ? "DEBIT" : "CREDIT";
+
             return TransferHistoryDto.builder()
                     .id(transfer.getId())
                     .amount(transfer.getAmount())
                     .requestId(transfer.getRequestId())
+                    .type(transferType)
                     .status(transfer.getStatus())
                     .createdAt(transfer.getCreatedAt())
                     .settlementDate(transfer.getSettlementDate())
@@ -422,6 +429,7 @@ public class TransferService {
         private final Long id;
         private final BigDecimal amount;
         private final String requestId;
+        private final String type;  // "DEBIT" or "CREDIT" from caller's perspective
         private final TransferStatus status;
         private final LocalDateTime createdAt;
         private final LocalDateTime settlementDate;
@@ -440,6 +448,7 @@ public class TransferService {
             this.id = null;
             this.amount = null;
             this.requestId = null;
+            this.type = null;
             this.status = null;
             this.createdAt = null;
             this.settlementDate = null;
@@ -454,12 +463,13 @@ public class TransferService {
             this.daysUntilSettlement = 0;
         }
 
-        public TransferHistoryDto(Long id, BigDecimal amount, String requestId, TransferStatus status, LocalDateTime createdAt, LocalDateTime settlementDate,
+        public TransferHistoryDto(Long id, BigDecimal amount, String requestId, String type, TransferStatus status, LocalDateTime createdAt, LocalDateTime settlementDate,
                                    boolean fraudFlagged, AdminReviewStatus adminReviewStatus, String senderName, String senderEmail, String senderPhone,
                                    String receiverName, String receiverEmail, String receiverPhone, int daysUntilSettlement) {
             this.id = id;
             this.amount = amount;
             this.requestId = requestId;
+            this.type = type;
             this.status = status;
             this.createdAt = createdAt;
             this.settlementDate = settlementDate;
@@ -478,10 +488,28 @@ public class TransferService {
             return new Builder();
         }
 
+        public Long getId() { return id; }
+        public BigDecimal getAmount() { return amount; }
+        public String getRequestId() { return requestId; }
+        public String getType() { return type; }
+        public TransferStatus getStatus() { return status; }
+        public LocalDateTime getCreatedAt() { return createdAt; }
+        public LocalDateTime getSettlementDate() { return settlementDate; }
+        public boolean isFraudFlagged() { return fraudFlagged; }
+        public AdminReviewStatus getAdminReviewStatus() { return adminReviewStatus; }
+        public String getSenderName() { return senderName; }
+        public String getSenderEmail() { return senderEmail; }
+        public String getSenderPhone() { return senderPhone; }
+        public String getReceiverName() { return receiverName; }
+        public String getReceiverEmail() { return receiverEmail; }
+        public String getReceiverPhone() { return receiverPhone; }
+        public int getDaysUntilSettlement() { return daysUntilSettlement; }
+
         public static class Builder {
             private Long id;
             private BigDecimal amount;
             private String requestId;
+            private String type;
             private TransferStatus status;
             private LocalDateTime createdAt;
             private LocalDateTime settlementDate;
@@ -498,6 +526,7 @@ public class TransferService {
             public Builder id(Long id) { this.id = id; return this; }
             public Builder amount(BigDecimal amount) { this.amount = amount; return this; }
             public Builder requestId(String requestId) { this.requestId = requestId; return this; }
+            public Builder type(String type) { this.type = type; return this; }
             public Builder status(TransferStatus status) { this.status = status; return this; }
             public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
             public Builder settlementDate(LocalDateTime settlementDate) { this.settlementDate = settlementDate; return this; }
@@ -512,7 +541,7 @@ public class TransferService {
             public Builder daysUntilSettlement(int daysUntilSettlement) { this.daysUntilSettlement = daysUntilSettlement; return this; }
 
             public TransferHistoryDto build() {
-                return new TransferHistoryDto(id, amount, requestId, status, createdAt, settlementDate, fraudFlagged, adminReviewStatus,
+                return new TransferHistoryDto(id, amount, requestId, type, status, createdAt, settlementDate, fraudFlagged, adminReviewStatus,
                         senderName, senderEmail, senderPhone, receiverName, receiverEmail, receiverPhone, daysUntilSettlement);
             }
         }

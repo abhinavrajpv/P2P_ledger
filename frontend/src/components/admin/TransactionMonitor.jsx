@@ -33,7 +33,7 @@ const TransactionMonitor = () => {
             setTotalPages(response.data.totalPages);
             setPage(page);
         } catch (error) {
-            console.error('Failed to fetch transactions');
+            console.error('Failed to fetch transactions:', error.response?.data?.message || error.message);
         } finally {
             setLoading(false);
         }

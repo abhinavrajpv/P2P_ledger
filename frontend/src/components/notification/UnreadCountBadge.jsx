@@ -1,31 +1,33 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const UnreadCountBadge = () => {
+const UnreadCountBadge = ({ inline = false }) => {
     const [unreadCount, setUnreadCount] = useState(0);
-    const [loading, setLoading] = useState(false);
 
     const fetchUnreadCount = async () => {
-        setLoading(true);
         try {
             const token = localStorage.getItem('token');
+            if (!token) return;
             const response = await axios.get('/api/notifications/unread-count', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setUnreadCount(response.data);
+            setUnreadCount(response.data || 0);
         } catch (error) {
-            console.error('Failed to fetch unread count');
-        } finally {
-            setLoading(false);
+            console.error('Failed to fetch unread count:', error.response?.data?.message || error.message);
         }
     };
 
     useEffect(() => {
         fetchUnreadCount();
+        // Poll every 30 seconds
+        const interval = setInterval(fetchUnreadCount, 30000);
+        return () => clearInterval(interval);
     }, []);
 
-    if (unreadCount === 0 && !loading) {
-        return null;
+    if (unreadCount === 0) return null;
+
+    if (inline) {
+        return <span className="unread-count-inline">{unreadCount}</span>;
     }
 
     return (

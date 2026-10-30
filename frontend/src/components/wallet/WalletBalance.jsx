@@ -22,7 +22,8 @@ const WalletBalance = () => {
             setDailyLimit(response.data.dailyLimit);
             setStatus(response.data.status);
         } catch (error) {
-            setError('Failed to fetch wallet balance');
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch wallet balance';
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -33,11 +34,20 @@ const WalletBalance = () => {
     }, []);
 
     if (error) {
-        return <div className="error">{error}</div>;
+        return (
+            <div className="wallet-balance">
+                <div className="error">{error}</div>
+                <button onClick={fetchBalance}>Retry</button>
+            </div>
+        );
     }
 
-    if (!balance && !loading) {
-        return <button onClick={fetchBalance}>Load Wallet</button>;
+    if (balance === null && !loading) {
+        return (
+            <div className="wallet-balance">
+                <button onClick={fetchBalance}>Load Wallet</button>
+            </div>
+        );
     }
 
     return (
@@ -46,15 +56,15 @@ const WalletBalance = () => {
             <div className="balance-info">
                 <div className="balance-item">
                     <span className="label">Available Balance</span>
-                    <span className="value">{balance ? `₹${balance.toFixed(2)}` : '-'}</span>
+                    <span className="value">{balance !== null ? `₹${parseFloat(balance).toFixed(2)}` : '-'}</span>
                 </div>
                 <div className="balance-item">
                     <span className="label">Today's Spending</span>
-                    <span className="value">{todaySpending ? `₹${todaySpending.toFixed(2)}` : '-'}</span>
+                    <span className="value">{todaySpending !== null ? `₹${parseFloat(todaySpending).toFixed(2)}` : '-'}</span>
                 </div>
                 <div className="balance-item">
                     <span className="label">Daily Limit</span>
-                    <span className="value">{dailyLimit ? `₹${dailyLimit.toFixed(2)}` : '-'}</span>
+                    <span className="value">{dailyLimit !== null ? `₹${parseFloat(dailyLimit).toFixed(2)}` : '-'}</span>
                 </div>
                 <div className="balance-item">
                     <span className="label">Status</span>

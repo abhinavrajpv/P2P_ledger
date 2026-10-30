@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 import './index.css'
 
 // Authentication
@@ -32,31 +33,82 @@ import FraudReview from './components/admin/FraudReview'
 import JobMonitor from './components/admin/JobMonitor'
 import ReconciliationReport from './components/admin/ReconciliationReport'
 
+function NavBar() {
+    const navigate = useNavigate()
+    const user = (() => {
+        try { return JSON.parse(localStorage.getItem('user')) } catch { return null }
+    })()
+    const isLoggedIn = !!localStorage.getItem('token')
+
+    const handleLogout = () => {
+        localStorage.removeItem('token')
+        localStorage.removeItem('userId')
+        localStorage.removeItem('user')
+        navigate('/login')
+    }
+
+    if (!isLoggedIn) return null
+
+    return (
+        <nav className="navbar">
+            <div className="nav-links">
+                <NavLink to="/wallet" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                    💳 Wallet
+                </NavLink>
+                <NavLink to="/transfers" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                    💸 Send Money
+                </NavLink>
+                <NavLink to="/notifications" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                    🔔 Notifications <UnreadCountBadge inline />
+                </NavLink>
+                {user?.role === 'ADMIN' && (
+                    <NavLink to="/admin" className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'}>
+                        🛠 Admin
+                    </NavLink>
+                )}
+            </div>
+            <div className="nav-user">
+                <span className="nav-username">👤 {user?.name || 'User'}</span>
+                <button className="logout-btn" onClick={handleLogout}>Logout</button>
+            </div>
+        </nav>
+    )
+}
+
+// Wallet page with auto-refresh after deposit
+function WalletPage() {
+    const [balanceKey, setBalanceKey] = useState(0)
+    return (
+        <div className="dashboard">
+            <WalletBalance key={balanceKey} />
+            <DepositForm onSuccess={() => setBalanceKey(k => k + 1)} />
+            <WalletStatusToggle />
+        </div>
+    )
+}
+
 function App() {
     return (
         <div className="app">
             <Router>
                 <header className="header">
                     <h1>P2P Payment Ledger</h1>
-                    <UnreadCountBadge />
                 </header>
+                <NavBar />
                 <main className="main">
                     <Routes>
-                        {/* Public Routes */}
+                        {/* Public */}
                         <Route path="/login" element={<AuthContainer />} />
                         <Route path="/register" element={<AuthContainer />} />
-                        
-                        {/* User Dashboard Routes - Protected */}
+
+                        {/* Wallet */}
                         <Route path="/wallet" element={
                             <PrivateRoute>
-                                <div className="dashboard">
-                                    <WalletBalance />
-                                    <DepositForm />
-                                    <WalletStatusToggle />
-                                </div>
+                                <WalletPage />
                             </PrivateRoute>
                         } />
-                        
+
+                        {/* Send Money / Transfers */}
                         <Route path="/transfers" element={
                             <PrivateRoute>
                                 <div className="dashboard">
@@ -68,7 +120,7 @@ function App() {
                                 </div>
                             </PrivateRoute>
                         } />
-                        
+
                         <Route path="/transfers/:id" element={
                             <PrivateRoute>
                                 <div className="dashboard">
@@ -76,7 +128,8 @@ function App() {
                                 </div>
                             </PrivateRoute>
                         } />
-                        
+
+                        {/* Notifications */}
                         <Route path="/notifications" element={
                             <PrivateRoute>
                                 <div className="dashboard">
@@ -84,8 +137,8 @@ function App() {
                                 </div>
                             </PrivateRoute>
                         } />
-                        
-                        {/* Admin Routes - Protected & Admin Only */}
+
+                        {/* Admin */}
                         <Route path="/admin" element={
                             <PrivateRoute requireAdmin>
                                 <div className="dashboard">
@@ -98,8 +151,8 @@ function App() {
                                 </div>
                             </PrivateRoute>
                         } />
-                        
-                        {/* Default */}
+
+                        {/* Default redirect */}
                         <Route path="/" element={<Navigate to="/login" replace />} />
                     </Routes>
                 </main>

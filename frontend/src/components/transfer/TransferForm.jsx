@@ -34,7 +34,8 @@ const TransferForm = ({ onTransferSuccess, onError }) => {
             setPin('');
             onTransferSuccess?.(response.data);
         } catch (error) {
-            onError?.(error.response?.data?.message || 'Transfer failed');
+            const errorMessage = error.response?.data?.message || error.message || 'Transfer failed';
+            onError?.(errorMessage);
         } finally {
             setLoading(false);
         }

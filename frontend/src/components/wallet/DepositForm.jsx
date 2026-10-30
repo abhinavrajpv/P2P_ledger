@@ -1,30 +1,36 @@
 import { useState } from 'react';
 import axios from 'axios';
 
-const DepositForm = () => {
+const DepositForm = ({ onSuccess }) => {
     const [amount, setAmount] = useState('');
     const [reference, setReference] = useState('');
     const [loading, setLoading] = useState(false);
-    const [success, setSuccess] = useState('');
+    const [message, setMessage] = useState('');
+    const [isError, setIsError] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        setSuccess('');
+        setMessage('');
+        setIsError(false);
 
         try {
             const token = localStorage.getItem('token');
-            await axios.post('/api/wallet/deposit', {
+            const response = await axios.post('/api/wallet/deposit', {
                 amount: parseFloat(amount),
                 reference
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setSuccess('Deposit processed successfully');
+            setMessage(`Deposit of ₹${parseFloat(amount).toFixed(2)} processed successfully! New balance: ₹${parseFloat(response.data.newBalance).toFixed(2)}`);
+            setIsError(false);
             setAmount('');
             setReference('');
+            onSuccess?.(); // notify parent to refresh balance
         } catch (error) {
-            setSuccess(`Deposit failed: ${error.response?.data?.message || 'Unknown error'}`);
+            const errorMessage = error.response?.data?.message || error.message || 'Deposit failed';
+            setMessage(`Deposit failed: ${errorMessage}`);
+            setIsError(true);
         } finally {
             setLoading(false);
         }
@@ -59,7 +65,7 @@ const DepositForm = () => {
                     {loading ? 'Processing...' : 'Deposit'}
                 </button>
             </form>
-            {success && <div className={`message ${success.includes('successfully') ? 'success' : 'error'}`}>{success}</div>}
+            {message && <div className={`message ${isError ? 'error' : 'success'}`}>{message}</div>}
         </div>
     );
 };

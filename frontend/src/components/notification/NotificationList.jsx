@@ -22,7 +22,7 @@ const NotificationList = () => {
             setPage(page);
             setUpdated(false);
         } catch (error) {
-            console.error('Failed to fetch notifications');
+            console.error('Failed to fetch notifications:', error.response?.data?.message || error.message);
         } finally {
             setLoading(false);
         }

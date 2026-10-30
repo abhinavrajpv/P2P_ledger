@@ -25,7 +25,7 @@ const JobMonitor = () => {
             setTotalPages(response.data.totalPages || 1);
             setPage(page);
         } catch (error) {
-            console.error('Failed to fetch job logs');
+            console.error('Failed to fetch job logs:', error.response?.data?.message || error.message);
         } finally {
             setLoading(false);
         }

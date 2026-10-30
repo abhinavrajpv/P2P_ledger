@@ -21,7 +21,7 @@ const SettlementMonitor = () => {
             setTotalPages(response.data.totalPages);
             setPage(page);
         } catch (error) {
-            console.error('Failed to fetch settlements');
+            console.error('Failed to fetch settlements:', error.response?.data?.message || error.message);
         } finally {
             setLoading(false);
         }
@@ -40,7 +40,7 @@ const SettlementMonitor = () => {
             });
             fetchSettlements(page);
         } catch (error) {
-            console.error('Failed to process settlement');
+            console.error('Failed to process settlement:', error.response?.data?.message || error.message);
         } finally {
             setProcessingId(null);
         }
