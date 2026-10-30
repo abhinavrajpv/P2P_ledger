@@ -17,6 +17,7 @@ C:\Users\caytm\Desktop\Projects\Project-4\src\main\java\com\p2pledger\service\Au
 C:\Users\caytm\Desktop\Projects\Project-4\src\main\java\com\p2pledger\model\Role.java
 C:\Users\caytm\Desktop\Projects\Project-4\src\main\java\com\p2pledger\model\AuditLog.java
 C:\Users\caytm\Desktop\Projects\Project-4\src\main\java\com\p2pledger\config\JwtAuthenticationFilter.java
+C:\Users\caytm\Desktop\Projects\Project-4\src\main\java\com\p2pledger\controller\UserController.java
 C:\Users\caytm\Desktop\Projects\Project-4\src\main\java\com\p2pledger\controller\WalletController.java
 C:\Users\caytm\Desktop\Projects\Project-4\src\main\java\com\p2pledger\repository\LedgerEntryRepository.java
 C:\Users\caytm\Desktop\Projects\Project-4\src\main\java\com\p2pledger\model\ScheduledJobLog.java

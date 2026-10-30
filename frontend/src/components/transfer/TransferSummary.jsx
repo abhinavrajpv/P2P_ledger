@@ -10,10 +10,7 @@ const TransferSummary = () => {
         setLoading(true);
         setError('');
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get('/api/transfers/summary', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await axios.get('/api/transfers/summary');
             setSummary(response.data);
         } catch (error) {
             setError('Failed to fetch transfer summary');

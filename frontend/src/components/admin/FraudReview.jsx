@@ -12,9 +12,7 @@ const FraudReview = () => {
     const fetchAlerts = async (page = 0) => {
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
             const response = await axios.get('/api/admin/fraud', {
-                headers: { Authorization: `Bearer ${token}` },
                 params: { page, size: 10 }
             });
             setAlerts(response.data.content);
@@ -35,13 +33,10 @@ const FraudReview = () => {
         setProcessingId(fraudAlertId);
         setAction(actionType);
         try {
-            const token = localStorage.getItem('token');
             const endpoint = actionType === 'approve' 
                 ? `/api/admin/fraud/${fraudAlertId}/approve`
                 : `/api/admin/fraud/${fraudAlertId}/refund`;
-            await axios.post(endpoint, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await axios.post(endpoint, {});
             fetchAlerts(page);
         } catch (error) {
             console.error(`Failed to ${actionType} fraud alert:`, error.response?.data?.message || error.message);

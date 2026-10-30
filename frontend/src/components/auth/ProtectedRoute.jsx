@@ -1,8 +1,9 @@
 import { Navigate, Outlet } from 'react-router-dom';
+import { getToken, getUser } from '../../auth';
 
 const ProtectedRoute = ({ children, requireAdmin }) => {
-    const token = localStorage.getItem('token');
-    const user = localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')) : null;
+    const token = getToken();
+    const user = getUser();
 
     if (!token || !user) {
         return <Navigate to="/login" replace />;

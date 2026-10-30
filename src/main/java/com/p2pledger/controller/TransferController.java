@@ -23,11 +23,6 @@ public class TransferController {
     private final TransferService transferService;
     private final UserService userService;
 
-    @GetMapping("/users/search")
-    public ResponseEntity<List<UserService.UserSearchResult>> searchUsers(@RequestParam String query) {
-        return ResponseEntity.ok(userService.searchUsers(query));
-    }
-
     @PostMapping
     public ResponseEntity<Transfer> createTransfer(@RequestBody CreateTransferRequest request, Authentication authentication) {
         Long senderId = Long.parseLong(authentication.getName());

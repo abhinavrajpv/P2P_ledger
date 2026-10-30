@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import './index.css'
+import { getUser, clearAuth, isLoggedIn } from './auth'
 
 // Authentication
 import AuthContainer from './components/auth/AuthContainer'
@@ -35,19 +36,15 @@ import ReconciliationReport from './components/admin/ReconciliationReport'
 
 function NavBar() {
     const navigate = useNavigate()
-    const user = (() => {
-        try { return JSON.parse(localStorage.getItem('user')) } catch { return null }
-    })()
-    const isLoggedIn = !!localStorage.getItem('token')
+    const user = getUser()
+    const loggedIn = isLoggedIn()
 
     const handleLogout = () => {
-        localStorage.removeItem('token')
-        localStorage.removeItem('userId')
-        localStorage.removeItem('user')
+        clearAuth()
         navigate('/login')
     }
 
-    if (!isLoggedIn) return null
+    if (!loggedIn) return null
 
     return (
         <nav className="navbar">
@@ -87,6 +84,20 @@ function WalletPage() {
     )
 }
 
+// Send Money page — UserSearch auto-fills receiver ID in TransferForm
+function TransfersPage() {
+    const [selectedReceiverId, setSelectedReceiverId] = useState(null)
+    return (
+        <div className="dashboard">
+            <TransferForm prefilledReceiverId={selectedReceiverId} onReceiverUsed={() => setSelectedReceiverId(null)} />
+            <UserSearch onUserSelect={(user) => setSelectedReceiverId(user.id)} />
+            <TransactionHistory />
+            <TransferSummary />
+            <MaskingToggle />
+        </div>
+    )
+}
+
 function App() {
     return (
         <div className="app">
@@ -111,13 +122,7 @@ function App() {
                         {/* Send Money / Transfers */}
                         <Route path="/transfers" element={
                             <PrivateRoute>
-                                <div className="dashboard">
-                                    <TransferForm />
-                                    <UserSearch />
-                                    <TransactionHistory />
-                                    <TransferSummary />
-                                    <MaskingToggle />
-                                </div>
+                                <TransfersPage />
                             </PrivateRoute>
                         } />
 
@@ -132,9 +137,7 @@ function App() {
                         {/* Notifications */}
                         <Route path="/notifications" element={
                             <PrivateRoute>
-                                <div className="dashboard">
-                                    <NotificationList />
-                                </div>
+                                <NotificationList />
                             </PrivateRoute>
                         } />
 

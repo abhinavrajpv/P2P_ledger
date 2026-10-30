@@ -13,10 +13,7 @@ const WalletBalance = () => {
         setLoading(true);
         setError('');
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get('/api/wallet/balance', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await axios.get('/api/wallet/balance');
             setBalance(response.data.balance);
             setTodaySpending(response.data.todaySpending);
             setDailyLimit(response.data.dailyLimit);

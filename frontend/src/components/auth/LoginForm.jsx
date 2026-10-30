@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
+import { setAuth } from '../../auth';
 
 const LoginForm = ({ onLogin, onError }) => {
     const [identifier, setIdentifier] = useState('');
@@ -11,16 +12,8 @@ const LoginForm = ({ onLogin, onError }) => {
         setLoading(true);
 
         try {
-            const response = await axios.post('/api/auth/login', {
-                identifier,
-                password
-            });
-
-            // Store token and userId in localStorage
-            localStorage.setItem('token', response.data.token);
-            localStorage.setItem('userId', response.data.user.id.toString());
-            localStorage.setItem('user', JSON.stringify(response.data.user));
-
+            const response = await axios.post('/api/auth/login', { identifier, password });
+            setAuth(response.data.token, response.data.user);
             onLogin(response.data.user, response.data.token);
         } catch (error) {
             onError(error.response?.data?.message || 'Login failed');

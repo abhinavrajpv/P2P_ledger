@@ -12,9 +12,7 @@ const SettlementMonitor = () => {
     const fetchSettlements = async (page = 0) => {
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
             const response = await axios.get('/api/admin/settlements', {
-                headers: { Authorization: `Bearer ${token}` },
                 params: { page, size: 10 }
             });
             setSettlements(response.data.content);
@@ -34,10 +32,7 @@ const SettlementMonitor = () => {
     const processSettlement = async (transferId) => {
         setProcessingId(transferId);
         try {
-            const token = localStorage.getItem('token');
-            await axios.post('/api/admin/settlements/process', { transferId }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await axios.post('/api/admin/settlements/process', { transferId });
             fetchSettlements(page);
         } catch (error) {
             console.error('Failed to process settlement:', error.response?.data?.message || error.message);

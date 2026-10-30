@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
+import { setAuth, clearAuth, getUser } from '../../auth';
 
 const AuthContainer = () => {
     const [isLogin, setIsLogin] = useState(true);
@@ -10,20 +11,15 @@ const AuthContainer = () => {
     const navigate = useNavigate();
 
     const handleLogin = (user, token) => {
-        localStorage.setItem('token', token);
-        localStorage.setItem('userId', user.id.toString());
-        localStorage.setItem('user', JSON.stringify(user));
+        setAuth(token, user);
         setMessage('Login successful!');
         setLoginSuccess(true);
     };
 
-    const handleRegister = (message, user) => {
-        setMessage(message);
+    const handleRegister = (msg, user) => {
+        setMessage(msg);
         setIsLogin(true);
         if (user) {
-            localStorage.setItem('token', localStorage.getItem('token'));
-            localStorage.setItem('userId', user.id.toString());
-            localStorage.setItem('user', JSON.stringify(user));
             setLoginSuccess(true);
         }
     };
@@ -33,19 +29,17 @@ const AuthContainer = () => {
     };
 
     const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        clearAuth();
         setLoginSuccess(false);
         setMessage('Logged out successfully');
         navigate('/login');
     };
 
-    // Navigate after successful login
+    // Navigate after successful login — reads role from sessionStorage
     useEffect(() => {
         if (loginSuccess) {
-            const storedUser = localStorage.getItem('user');
-            if (storedUser) {
-                const user = JSON.parse(storedUser);
+            const user = getUser();
+            if (user) {
                 if (user.role === 'ADMIN') {
                     navigate('/admin');
                 } else {
@@ -71,10 +65,9 @@ const AuthContainer = () => {
                     Register
                 </button>
             </div>
-            
+
             {loginSuccess ? (
                 <div className="success-message">
-                    <h2>Welcome back!</h2>
                     <p>{message}</p>
                     <button onClick={handleLogout}>Logout</button>
                 </div>
@@ -85,8 +78,11 @@ const AuthContainer = () => {
                     ) : (
                         <RegisterForm onRegister={handleRegister} onError={handleError} />
                     )}
-
-                    {message && <div className={`message ${message.includes('successful') || message.includes('Welcome') ? 'success' : 'error'}`}>{message}</div>}
+                    {message && (
+                        <div className={`message ${message.toLowerCase().includes('success') || message.toLowerCase().includes('welcome') ? 'success' : 'error'}`}>
+                            {message}
+                        </div>
+                    )}
                 </>
             )}
         </div>

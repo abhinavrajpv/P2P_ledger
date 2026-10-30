@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
+import { setAuth } from '../../auth';
 
 const RegisterForm = ({ onRegister, onError }) => {
     const [name, setName] = useState('');
@@ -28,10 +29,8 @@ const RegisterForm = ({ onRegister, onError }) => {
                 password
             });
 
-            // Store token and userId in localStorage
-            localStorage.setItem('token', loginResponse.data.token);
-            localStorage.setItem('userId', loginResponse.data.user.id.toString());
-            localStorage.setItem('user', JSON.stringify(loginResponse.data.user));
+            // Store token and userId in sessionStorage (per-tab, not shared)
+            setAuth(loginResponse.data.token, loginResponse.data.user);
 
             onRegister(response.data.message, loginResponse.data.user);
         } catch (error) {

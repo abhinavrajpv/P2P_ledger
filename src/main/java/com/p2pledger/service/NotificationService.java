@@ -4,11 +4,16 @@ import com.p2pledger.model.Notification;
 import com.p2pledger.model.NotificationType;
 import com.p2pledger.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -35,7 +40,7 @@ public class NotificationService {
         if (!notification.getUserId().equals(userId)) {
             throw new IllegalArgumentException("Access denied");
         }
-        notification.setRead(true);
+        notification.setRead(true);  // Lombok generates setRead() from isRead field
         notificationRepository.save(notification);
     }
 
@@ -43,13 +48,32 @@ public class NotificationService {
     public void markAllAsRead(Long userId) {
         List<Notification> notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
         for (Notification notification : notifications) {
-            notification.setRead(true);
+            notification.setRead(true);  // Lombok generates setRead() from isRead field
         }
         notificationRepository.saveAll(notifications);
     }
 
     public int getUnreadCount(Long userId) {
         return notificationRepository.countByUserIdAndIsReadFalse(userId);
+    }
+
+    public Page<Notification> getNotifications(Long userId, Pageable pageable) {
+        List<Notification> allNotifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        
+        // Sort by createdAt descending (most recent first)
+        List<Notification> sortedNotifications = allNotifications.stream()
+                .sorted(Comparator.comparing(Notification::getCreatedAt).reversed())
+                .collect(Collectors.toList());
+        
+        // Apply pagination
+        int start = (int) pageable.getOffset();
+        int end = Math.min(start + pageable.getPageSize(), sortedNotifications.size());
+        
+        List<Notification> pageContent = start < sortedNotifications.size() 
+                ? sortedNotifications.subList(start, end) 
+                : List.of();
+        
+        return new PageImpl<>(pageContent, pageable, sortedNotifications.size());
     }
 
     public List<Notification> getNotifications(Long userId) {

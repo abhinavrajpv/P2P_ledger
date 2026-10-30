@@ -272,6 +272,7 @@ public class ScheduledJobService {
                 .amount(amount)
                 .balanceBefore(receiverOldBalance)
                 .balanceAfter(receiverNewBalance)
+                .createdAt(LocalDateTime.now())
                 .build();
         ledgerEntryRepository.save(receiverLedgerEntry);
 
@@ -317,29 +318,11 @@ public class ScheduledJobService {
                 .amount(amount)
                 .balanceBefore(senderOldBalance)
                 .balanceAfter(senderNewBalance)
+                .createdAt(LocalDateTime.now())
                 .build();
         ledgerEntryRepository.save(refundLedgerEntry);
 
         walletRepository.save(senderWallet);
-
-        // If receiver wallet was provided, also refund the receiver
-        if (receiverWallet != null) {
-            BigDecimal receiverOldBalance = receiverWallet.getBalance();
-            BigDecimal receiverNewBalance = receiverOldBalance.add(amount);
-            receiverWallet.setBalance(receiverNewBalance);
-
-            LedgerEntry receiverLedgerEntry = LedgerEntry.builder()
-                    .transferId(transfer.getId())
-                    .userId(transfer.getReceiverId())
-                    .type(LedgerType.CREDIT)
-                    .amount(amount)
-                    .balanceBefore(receiverOldBalance)
-                    .balanceAfter(receiverNewBalance)
-                    .build();
-            ledgerEntryRepository.save(receiverLedgerEntry);
-
-            walletRepository.save(receiverWallet);
-        }
 
         // Update transfer status to DECLINED (refund completed)
         transfer.setStatus(TransferStatus.DECLINED);
@@ -366,6 +349,7 @@ public class ScheduledJobService {
                 .type(type)
                 .message(message)
                 .isRead(false)
+                .createdAt(java.time.LocalDateTime.now())
                 .build();
         notificationRepository.save(notification);
     }
@@ -377,6 +361,7 @@ public class ScheduledJobService {
                 .entityType(entityType)
                 .entityId(entityId)
                 .details(details)
+                .createdAt(java.time.LocalDateTime.now())
                 .build();
         auditLogRepository.save(auditLog);
     }

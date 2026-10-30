@@ -55,15 +55,8 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
     @Query("SELECT t FROM Transfer t WHERE t.senderId = :userId OR t.receiverId = :userId")
     Page<Transfer> findByUserId(@Param("userId") Long userId, Pageable pageable);
 
-    @Query("SELECT t FROM Transfer t WHERE t.senderId = :userId OR t.receiverId = :userId " +
-           "AND (:type IS NULL OR t.status = :type) " +
-           "AND (:status IS NULL OR t.status = :status) " +
-           "AND (:startDate IS NULL OR t.createdAt >= :startDate) " +
-           "AND (:endDate IS NULL OR t.createdAt <= :endDate)")
+    @Query("SELECT t FROM Transfer t WHERE (t.senderId = :userId OR t.receiverId = :userId) " +
+           "ORDER BY t.createdAt DESC")
     Page<Transfer> findByUserIdWithFilters(@Param("userId") Long userId,
-                                           @Param("type") String type,
-                                           @Param("status") String status,
-                                           @Param("startDate") LocalDateTime startDate,
-                                           @Param("endDate") LocalDateTime endDate,
                                            Pageable pageable);
 }

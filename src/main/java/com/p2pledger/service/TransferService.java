@@ -293,14 +293,44 @@ public class TransferService {
     public Page<TransferHistoryDto> getTransactionHistory(Long userId, Integer page, Integer size,
                                                            String type, String status, LocalDateTime startDate, LocalDateTime endDate) {
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
-        org.springframework.data.domain.Page<Transfer> transfers = transferRepository.findByUserIdWithFilters(userId, type, status, startDate, endDate, pageable);
+        
+        // Build query based on filters
+        org.springframework.data.domain.Page<Transfer> transfers;
+        
+        if (startDate != null && endDate != null) {
+            // Filter by date range
+            transfers = transferRepository.findByUserId(userId, pageable).stream()
+                    .filter(t -> t.getCreatedAt().isAfter(startDate.minusSeconds(1)) && 
+                                 t.getCreatedAt().isBefore(endDate.plusSeconds(1)))
+                    .collect(java.util.stream.Collectors.collectingAndThen(
+                            java.util.stream.Collectors.toList(),
+                            list -> new org.springframework.data.domain.PageImpl<>(list, pageable, list.size())
+                    ));
+        } else if (startDate != null) {
+            transfers = transferRepository.findByUserId(userId, pageable).stream()
+                    .filter(t -> t.getCreatedAt().isAfter(startDate.minusSeconds(1)))
+                    .collect(java.util.stream.Collectors.collectingAndThen(
+                            java.util.stream.Collectors.toList(),
+                            list -> new org.springframework.data.domain.PageImpl<>(list, pageable, list.size())
+                    ));
+        } else if (endDate != null) {
+            transfers = transferRepository.findByUserId(userId, pageable).stream()
+                    .filter(t -> t.getCreatedAt().isBefore(endDate.plusSeconds(1)))
+                    .collect(java.util.stream.Collectors.collectingAndThen(
+                            java.util.stream.Collectors.toList(),
+                            list -> new org.springframework.data.domain.PageImpl<>(list, pageable, list.size())
+                    ));
+        } else {
+            // No date filter
+            transfers = transferRepository.findByUserIdWithFilters(userId, pageable);
+        }
         
         // Get masking preference for this user
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         boolean maskingEnabled = user.isMaskingEnabled();
         
-        // Map transfers to DTOs with masking applied
+        // Map transfers to DTOs with masking applied and filters
         org.springframework.data.domain.Page<TransferHistoryDto> dtoPage = transfers.map(transfer -> {
             User sender = userRepository.findById(transfer.getSenderId())
                     .orElse(new User());
@@ -309,6 +339,16 @@ public class TransferService {
             
             // Determine type from the perspective of userId
             String transferType = transfer.getSenderId().equals(userId) ? "DEBIT" : "CREDIT";
+            
+            // Apply type filter (client-side since it's perspective-based)
+            if (type != null && !type.isEmpty() && !type.equalsIgnoreCase(transferType)) {
+                return null; // Filter out
+            }
+            
+            // Apply status filter
+            if (status != null && !status.isEmpty() && !status.equalsIgnoreCase(transfer.getStatus().name())) {
+                return null; // Filter out
+            }
 
             return TransferHistoryDto.builder()
                     .id(transfer.getId())
@@ -331,7 +371,12 @@ public class TransferService {
                     .build();
         });
         
-        return dtoPage;
+        // Remove null entries (filtered out)
+        java.util.List<TransferHistoryDto> filteredList = dtoPage.getContent().stream()
+                .filter(dto -> dto != null)
+                .collect(java.util.stream.Collectors.toList());
+        
+        return new org.springframework.data.domain.PageImpl<>(filteredList, pageable, filteredList.size());
     }
 
     public Transfer getTransferById(Long id) {
@@ -393,6 +438,7 @@ public class TransferService {
                 .type(type)
                 .message(message)
                 .isRead(false)
+                .createdAt(LocalDateTime.now())
                 .build();
         notificationRepository.save(notification);
     }
@@ -404,6 +450,7 @@ public class TransferService {
                 .entityType(entityType)
                 .entityId(entityId)
                 .details(details)
+                .createdAt(LocalDateTime.now())
                 .build();
         auditLogRepository.save(auditLog);
     }

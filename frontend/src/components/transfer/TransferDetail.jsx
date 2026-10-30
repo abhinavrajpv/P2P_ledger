@@ -16,10 +16,7 @@ const TransferDetail = ({ transferId, onBack }) => {
 
     const fetchMaskingStatus = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get('/api/masking/status', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await axios.get('/api/masking/status');
             setMaskingEnabled(response.data.enabled);
         } catch (error) {
             // Silently fail - masking status not critical
@@ -30,10 +27,7 @@ const TransferDetail = ({ transferId, onBack }) => {
         setLoading(true);
         setError('');
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`/api/transfers/${transferId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await axios.get(`/api/transfers/${transferId}`);
             setTransfer(response.data);
         } catch (error) {
             setError('Failed to fetch transfer details');
@@ -48,7 +42,7 @@ const TransferDetail = ({ transferId, onBack }) => {
 
     // Format counterparty info - masked if masking is enabled
     const formatCounterpartyInfo = (transfer) => {
-        const isSender = transfer.senderId.toString() === localStorage.getItem('userId');
+        const isSender = transfer.senderId.toString() === sessionStorage.getItem('userId');
         
         if (maskingEnabled) {
             return isSender 

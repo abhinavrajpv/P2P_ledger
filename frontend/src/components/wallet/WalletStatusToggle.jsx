@@ -9,10 +9,7 @@ const WalletStatusToggle = () => {
 
     const fetchStatus = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get('/api/wallet/balance', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await axios.get('/api/wallet/balance');
             setCurrentStatus(response.data.status);
         } catch (error) {
             const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch wallet status';
@@ -29,10 +26,7 @@ const WalletStatusToggle = () => {
         setMessage('');
 
         try {
-            const token = localStorage.getItem('token');
-            await axios.patch('/api/wallet/status', { status: newStatus }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await axios.patch('/api/wallet/status', { status: newStatus });
             setMessage(`Wallet ${newStatus} successfully`);
             setCurrentStatus(newStatus);
             setNewStatus('');

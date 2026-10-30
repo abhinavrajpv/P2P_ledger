@@ -3,6 +3,9 @@ package com.p2pledger.controller;
 import com.p2pledger.model.Notification;
 import com.p2pledger.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -24,9 +27,13 @@ public class NotificationController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Notification>> getNotifications(Authentication authentication) {
+    public ResponseEntity<Page<Notification>> getNotifications(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(notificationService.getNotifications(userId));
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(notificationService.getNotifications(userId, pageable));
     }
 
     @PatchMapping("/{id}/read")

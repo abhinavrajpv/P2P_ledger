@@ -4,33 +4,50 @@ import MarkAsRead from './MarkAsRead';
 
 const NotificationList = () => {
     const [notifications, setNotifications] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
     const [page, setPage] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
-    const [updated, setUpdated] = useState(false);
 
-    const fetchNotifications = async (page = 0) => {
+    const fetchNotifications = async (pageNum = 0) => {
         setLoading(true);
+        setError('');
         try {
-            const token = localStorage.getItem('token');
             const response = await axios.get('/api/notifications', {
-                headers: { Authorization: `Bearer ${token}` },
-                params: { page, size: 10 }
+                params: { page: pageNum, size: 10 }
             });
-            setNotifications(response.data.content);
-            setTotalPages(response.data.totalPages);
-            setPage(page);
-            setUpdated(false);
-        } catch (error) {
-            console.error('Failed to fetch notifications:', error.response?.data?.message || error.message);
+            
+            // Handle different response structures
+            if (response.data.content) {
+                setNotifications(response.data.content || []);
+                setTotalPages(response.data.totalPages || 0);
+            } else if (Array.isArray(response.data)) {
+                setNotifications(response.data);
+                setTotalPages(1);
+            } else {
+                setNotifications([]);
+                setTotalPages(0);
+            }
+            setPage(pageNum);
+        } catch (err) {
+            const errorMessage = err.response?.data?.message || err.message || 'Failed to load notifications';
+            setError(errorMessage);
+            console.error('Notification fetch error:', err);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchNotifications();
+        fetchNotifications(0);
     }, []);
+
+    const handleMarkAsRead = (notificationId) => {
+        // Optimistically update UI
+        setNotifications(prev => 
+            prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
+        );
+    };
 
     const handlePageChange = (newPage) => {
         if (newPage >= 0 && newPage < totalPages) {
@@ -39,12 +56,57 @@ const NotificationList = () => {
     };
 
     return (
-        <div className="notification-list">
+        <div className="notification-list" style={{ maxWidth: '800px', margin: '0 auto' }}>
             <h3>Notifications</h3>
-            {loading && <div className="loading">Loading notifications...</div>}
-            {!loading && notifications.length === 0 && <p>No notifications</p>}
             
-            {!loading && notifications.length > 0 && (
+            {loading && (
+                <div className="loading">
+                    <p>Loading notifications...</p>
+                </div>
+            )}
+
+            {error && !loading && (
+                <div className="error" style={{ 
+                    padding: '1rem', 
+                    backgroundColor: '#ffebee', 
+                    color: '#c62828', 
+                    borderRadius: '4px',
+                    marginBottom: '1rem'
+                }}>
+                    <p>{error}</p>
+                    <button 
+                        onClick={() => fetchNotifications(page)}
+                        style={{
+                            marginTop: '0.5rem',
+                            padding: '0.5rem 1rem',
+                            backgroundColor: '#1976d2',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Retry
+                    </button>
+                </div>
+            )}
+
+            {!loading && !error && notifications.length === 0 && (
+                <div style={{ 
+                    padding: '2rem', 
+                    textAlign: 'center', 
+                    color: '#666',
+                    backgroundColor: '#f5f5f5',
+                    borderRadius: '8px'
+                }}>
+                    <p>No notifications yet</p>
+                    <p style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>
+                        You'll receive notifications when transfers are initiated, settled, or require attention.
+                    </p>
+                </div>
+            )}
+            
+            {!loading && !error && notifications.length > 0 && (
                 <>
                     <div className="notifications-container">
                         {notifications.map((notification) => (
@@ -59,27 +121,52 @@ const NotificationList = () => {
                                 <div className="notification-time">
                                     {new Date(notification.createdAt).toLocaleString()}
                                 </div>
-                                <MarkAsRead notificationId={notification.id} onMarked={() => setUpdated(true)} />
+                                {!notification.isRead && (
+                                    <MarkAsRead 
+                                        notificationId={notification.id} 
+                                        onMarked={() => handleMarkAsRead(notification.id)} 
+                                    />
+                                )}
                             </div>
                         ))}
                     </div>
-                    <div className="pagination">
-                        <button
-                            onClick={() => handlePageChange(page - 1)}
-                            disabled={page === 0}
-                        >
-                            Previous
-                        </button>
-                        <span>Page {page + 1} of {totalPages}</span>
-                        <button
-                            onClick={() => handlePageChange(page + 1)}
-                            disabled={page >= totalPages - 1}
-                        >
-                            Next
-                        </button>
-                    </div>
+                    
+                    {totalPages > 1 && (
+                        <div className="pagination">
+                            <button
+                                onClick={() => handlePageChange(page - 1)}
+                                disabled={page === 0}
+                            >
+                                Previous
+                            </button>
+                            <span>Page {page + 1} of {totalPages}</span>
+                            <button
+                                onClick={() => handlePageChange(page + 1)}
+                                disabled={page >= totalPages - 1}
+                            >
+                                Next
+                            </button>
+                        </div>
+                    )}
                 </>
             )}
+            
+            <button 
+                onClick={() => fetchNotifications(page)} 
+                disabled={loading}
+                style={{ 
+                    marginTop: '1rem',
+                    padding: '0.5rem 1rem',
+                    backgroundColor: '#1976d2',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    opacity: loading ? 0.6 : 1
+                }}
+            >
+                {loading ? 'Refreshing...' : 'Refresh Notifications'}
+            </button>
         </div>
     );
 };

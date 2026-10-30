@@ -151,6 +151,7 @@ public class AdminService {
                 .amount(amount)
                 .balanceBefore(receiverOldBalance)
                 .balanceAfter(receiverNewBalance)
+                .createdAt(LocalDateTime.now())
                 .build();
         ledgerEntryRepository.save(receiverLedgerEntry);
 
@@ -237,29 +238,11 @@ public class AdminService {
                 .amount(amount)
                 .balanceBefore(senderOldBalance)
                 .balanceAfter(senderNewBalance)
+                .createdAt(LocalDateTime.now())
                 .build();
         ledgerEntryRepository.save(refundLedgerEntry);
 
         walletRepository.save(senderWallet);
-
-        // If receiver wallet was provided (settlement failure scenario), credit it too
-        if (receiverWallet != null) {
-            BigDecimal receiverOldBalance = receiverWallet.getBalance();
-            BigDecimal receiverNewBalance = receiverOldBalance.add(amount);
-            receiverWallet.setBalance(receiverNewBalance);
-
-            LedgerEntry receiverLedgerEntry = LedgerEntry.builder()
-                    .transferId(transfer.getId())
-                    .userId(transfer.getReceiverId())
-                    .type(LedgerType.CREDIT)
-                    .amount(amount)
-                    .balanceBefore(receiverOldBalance)
-                    .balanceAfter(receiverNewBalance)
-                    .build();
-            ledgerEntryRepository.save(receiverLedgerEntry);
-
-            walletRepository.save(receiverWallet);
-        }
 
         // Update transfer status
         transfer.setStatus(TransferStatus.DECLINED);

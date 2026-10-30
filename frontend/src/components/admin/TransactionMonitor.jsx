@@ -15,7 +15,6 @@ const TransactionMonitor = () => {
     const fetchTransactions = async (page = 0) => {
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
             const params = {
                 page,
                 size: 10,
@@ -26,7 +25,6 @@ const TransactionMonitor = () => {
                 endDate: endDate || undefined
             };
             const response = await axios.get('/api/admin/transactions', {
-                headers: { Authorization: `Bearer ${token}` },
                 params
             });
             setTransactions(response.data.content);

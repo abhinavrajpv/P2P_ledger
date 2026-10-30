@@ -8,10 +8,7 @@ const MarkAsRead = ({ notificationId, onMarked }) => {
     const markAsRead = async () => {
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
-            await axios.patch(`/api/notifications/${notificationId}/read`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await axios.patch(`/api/notifications/${notificationId}/read`, {});
             setSuccess(true);
             onMarked?.();
         } catch (error) {

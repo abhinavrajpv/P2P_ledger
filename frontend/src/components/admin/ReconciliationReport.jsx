@@ -14,9 +14,7 @@ const ReconciliationReport = () => {
         }
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
             const response = await axios.get('/api/admin/reconciliation', {
-                headers: { Authorization: `Bearer ${token}` },
                 params: { startDate, endDate }
             });
             setReports(response.data);

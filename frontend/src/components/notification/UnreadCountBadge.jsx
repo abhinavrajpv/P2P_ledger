@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import { getToken } from '../../auth';
 
 const UnreadCountBadge = ({ inline = false }) => {
     const [unreadCount, setUnreadCount] = useState(0);
 
     const fetchUnreadCount = async () => {
         try {
-            const token = localStorage.getItem('token');
-            if (!token) return;
-            const response = await axios.get('/api/notifications/unread-count', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            if (!getToken()) return;
+            const response = await axios.get('/api/notifications/unread-count');
             setUnreadCount(response.data || 0);
         } catch (error) {
             console.error('Failed to fetch unread count:', error.response?.data?.message || error.message);

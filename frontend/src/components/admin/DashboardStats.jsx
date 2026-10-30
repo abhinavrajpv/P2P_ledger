@@ -10,10 +10,7 @@ const DashboardStats = () => {
         setLoading(true);
         setError('');
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get('/api/admin/dashboard', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await axios.get('/api/admin/dashboard');
             setStats(response.data);
         } catch (error) {
             const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch dashboard statistics';

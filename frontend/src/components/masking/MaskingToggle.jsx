@@ -12,10 +12,7 @@ const MaskingToggle = () => {
         setLoading(true);
         setMessage('');
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get('/api/masking/status', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const response = await axios.get('/api/masking/status');
             setEnabled(response.data.enabled);
             setPin('');
             setMessage('Masking status refreshed successfully');
@@ -45,11 +42,8 @@ const MaskingToggle = () => {
         setMessageType('');
 
         try {
-            const token = localStorage.getItem('token');
             const endpoint = enable ? '/api/masking/enable' : '/api/masking/disable';
-            await axios.post(endpoint, { pin }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await axios.post(endpoint, { pin });
             setEnabled(enable);
             setMessage(`Masking ${enable ? 'enabled' : 'disabled'} successfully`);
             setMessageType('success');

@@ -11,14 +11,12 @@ const JobMonitor = () => {
     const fetchJobs = async (page = 0) => {
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
             const params = {
                 page,
                 size: 10,
                 jobName: jobName || undefined
             };
             const response = await axios.get('/api/admin/jobs', {
-                headers: { Authorization: `Bearer ${token}` },
                 params
             });
             setJobs(response.data);

@@ -15,12 +15,9 @@ const DepositForm = ({ onSuccess }) => {
         setIsError(false);
 
         try {
-            const token = localStorage.getItem('token');
             const response = await axios.post('/api/wallet/deposit', {
                 amount: parseFloat(amount),
                 reference
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
             });
             setMessage(`Deposit of ₹${parseFloat(amount).toFixed(2)} processed successfully! New balance: ₹${parseFloat(response.data.newBalance).toFixed(2)}`);
             setIsError(false);

@@ -13,17 +13,13 @@ const TransactionHistory = ({ onTransferSelect }) => {
         setLoading(true);
         setError('');
         try {
-            const token = localStorage.getItem('token');
             
             // Fetch masking status first
-            const maskingResponse = await axios.get('/api/masking/status', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const maskingResponse = await axios.get('/api/masking/status');
             setMaskingEnabled(maskingResponse.data.enabled);
             
             // Fetch transaction history
             const response = await axios.get('/api/transfers', {
-                headers: { Authorization: `Bearer ${token}` },
                 params: { page, size: 10 }
             });
             setTransfers(response.data.content);
