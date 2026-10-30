@@ -26,6 +26,10 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
     List<Transfer> findByStatus(String status);
 
     Page<Transfer> findByStatus(String status, Pageable pageable);
+    
+    List<Transfer> findByStatus(com.p2pledger.model.TransferStatus status);
+
+    Page<Transfer> findByStatus(com.p2pledger.model.TransferStatus status, Pageable pageable);
 
     List<Transfer> findBySenderIdAndReceiverIdAndAmountAndCreatedAtAfter(
             Long senderId, Long receiverId, java.math.BigDecimal amount, LocalDateTime after);
@@ -59,4 +63,7 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
            "ORDER BY t.createdAt DESC")
     Page<Transfer> findByUserIdWithFilters(@Param("userId") Long userId,
                                            Pageable pageable);
+    
+    // Admin enhancements
+    long countByStatus(com.p2pledger.model.TransferStatus status);
 }

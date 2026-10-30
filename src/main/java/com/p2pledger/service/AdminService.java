@@ -29,9 +29,11 @@ public class AdminService {
     private final DailySummaryRepository dailySummaryRepository;
     private final SettlementBatchRepository settlementBatchRepository;
 
-    // Task 10.1 - Dashboard data
+    // Task 10.1 - Dashboard data with today's stats and 30-day trend
     public DashboardData getDashboardData() {
         LocalDate thirtyDaysAgo = LocalDate.now().minusDays(30);
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        LocalDateTime todayEnd = LocalDate.now().atTime(23, 59, 59);
 
         // Get 30-day volume
         List<Transfer> recentTransfers = transferRepository.findAll().stream()
@@ -43,67 +45,135 @@ public class AdminService {
                 .map(Transfer::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        // Today's stats
+        List<Transfer> todayTransfers = transferRepository.findByCreatedAtBetween(todayStart, todayEnd, Pageable.unpaged()).getContent();
+        
+        BigDecimal todayVolume = todayTransfers.stream()
+                .filter(t -> t.getStatus() == TransferStatus.SUCCESS)
+                .map(Transfer::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        long todayCount = todayTransfers.size();
+        long todaySuccessCount = todayTransfers.stream()
+                .filter(t -> t.getStatus() == TransferStatus.SUCCESS)
+                .count();
+        long todayFailedCount = todayTransfers.stream()
+                .filter(t -> t.getStatus() == TransferStatus.FAILED || t.getStatus() == TransferStatus.DECLINED)
+                .count();
+
         // Get users count
         long usersCount = userRepository.count();
 
         // Get wallets count
         long walletsCount = walletRepository.count();
+        
+        // Get pending settlements count
+        long pendingSettlements = transferRepository.countByStatus(TransferStatus.PENDING);
+        
+        // Get flagged transactions count
+        long flaggedTransactions = fraudAlertRepository.countByStatus(FraudStatus.OPEN);
 
-        return new DashboardData(volume30Day, usersCount, walletsCount);
+        return new DashboardData(volume30Day, usersCount, walletsCount, pendingSettlements, flaggedTransactions,
+                todayVolume, todayCount, todaySuccessCount, todayFailedCount);
     }
 
-    // Task 10.2 - Transaction monitoring with filters
+    // Get all users for admin user list
+    public Page<User> getAllUsers(Pageable pageable) {
+        return userRepository.findAll(pageable);
+    }
+
+    // Task 10.2 - Transaction monitoring with filters including amount range
     public Page<Transfer> getTransactionsWithFilters(Pageable pageable, String status, Long senderId, Long receiverId,
-                                                     LocalDateTime startDate, LocalDateTime endDate) {
+                                                     LocalDateTime startDate, LocalDateTime endDate, BigDecimal minAmount, BigDecimal maxAmount) {
         // Build dynamic query based on provided filters
+        Page<Transfer> result;
+        
         if (senderId != null) {
             // Filter by senderId with optional status and date range
             if (status != null) {
-                return transferRepository.findBySenderIdAndStatus(senderId, status, pageable);
+                result = transferRepository.findBySenderIdAndStatus(senderId, status, pageable);
+            } else if (startDate != null && endDate != null) {
+                result = transferRepository.findBySenderIdAndCreatedAtBetween(senderId, startDate, endDate, pageable);
+            } else if (startDate != null) {
+                result = transferRepository.findBySenderIdAndCreatedAtAfter(senderId, startDate, pageable);
+            } else if (endDate != null) {
+                result = transferRepository.findBySenderIdAndCreatedAtBefore(senderId, endDate, pageable);
+            } else {
+                result = transferRepository.findBySenderId(senderId, pageable);
             }
-            if (startDate != null && endDate != null) {
-                return transferRepository.findBySenderIdAndCreatedAtBetween(senderId, startDate, endDate, pageable);
-            }
-            if (startDate != null) {
-                return transferRepository.findBySenderIdAndCreatedAtAfter(senderId, startDate, pageable);
-            }
-            if (endDate != null) {
-                return transferRepository.findBySenderIdAndCreatedAtBefore(senderId, endDate, pageable);
-            }
-            return transferRepository.findBySenderId(senderId, pageable);
         } else if (receiverId != null) {
             // Filter by receiverId with optional status and date range
             if (status != null) {
-                return transferRepository.findByReceiverIdAndStatus(receiverId, status, pageable);
+                result = transferRepository.findByReceiverIdAndStatus(receiverId, status, pageable);
+            } else if (startDate != null && endDate != null) {
+                result = transferRepository.findByReceiverIdAndCreatedAtBetween(receiverId, startDate, endDate, pageable);
+            } else if (startDate != null) {
+                result = transferRepository.findByReceiverIdAndCreatedAtAfter(receiverId, startDate, pageable);
+            } else if (endDate != null) {
+                result = transferRepository.findByReceiverIdAndCreatedAtBefore(receiverId, endDate, pageable);
+            } else {
+                result = transferRepository.findByReceiverId(receiverId, pageable);
             }
-            if (startDate != null && endDate != null) {
-                return transferRepository.findByReceiverIdAndCreatedAtBetween(receiverId, startDate, endDate, pageable);
-            }
-            if (startDate != null) {
-                return transferRepository.findByReceiverIdAndCreatedAtAfter(receiverId, startDate, pageable);
-            }
-            if (endDate != null) {
-                return transferRepository.findByReceiverIdAndCreatedAtBefore(receiverId, endDate, pageable);
-            }
-            return transferRepository.findByReceiverId(receiverId, pageable);
         } else if (status != null) {
             // Filter by status only
-            return transferRepository.findByStatus(status, pageable);
+            result = transferRepository.findByStatus(status, pageable);
         } else if (startDate != null && endDate != null) {
             // Filter by date range only
-            return transferRepository.findByCreatedAtBetween(startDate, endDate, pageable);
+            result = transferRepository.findByCreatedAtBetween(startDate, endDate, pageable);
         } else if (startDate != null) {
-            return transferRepository.findByCreatedAtAfter(startDate, pageable);
+            result = transferRepository.findByCreatedAtAfter(startDate, pageable);
         } else if (endDate != null) {
-            return transferRepository.findByCreatedAtBefore(endDate, pageable);
+            result = transferRepository.findByCreatedAtBefore(endDate, pageable);
         } else {
-            return transferRepository.findAll(pageable);
+            result = transferRepository.findAll(pageable);
         }
+        
+        // Apply amount filters if provided (post-filtering since we can't easily add to all query methods)
+        if (minAmount != null || maxAmount != null) {
+            List<Transfer> filtered = result.getContent().stream()
+                    .filter(t -> {
+                        if (minAmount != null && t.getAmount().compareTo(minAmount) < 0) {
+                            return false;
+                        }
+                        if (maxAmount != null && t.getAmount().compareTo(maxAmount) > 0) {
+                            return false;
+                        }
+                        return true;
+                    })
+                    .collect(Collectors.toList());
+            // Note: This is a simplified approach. For production, consider custom query with amount filtering
+            return new org.springframework.data.domain.PageImpl<>(filtered, pageable, result.getTotalElements());
+        }
+        
+        return result;
     }
 
-    // Task 10.3 - Settlement monitoring
+    // Task 10.3 - Settlement monitoring with due date groupings
     public Page<Transfer> getPendingSettlements(Pageable pageable) {
-        return transferRepository.findByStatus(TransferStatus.PENDING.name(), pageable);
+        return transferRepository.findByStatus(TransferStatus.PENDING, pageable);
+    }
+    
+    public SettlementSummary getSettlementSummary() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime todayEnd = LocalDate.now().atTime(23, 59, 59);
+        LocalDateTime tomorrowEnd = LocalDate.now().plusDays(1).atTime(23, 59, 59);
+        
+        List<Transfer> allPending = transferRepository.findByStatus(TransferStatus.PENDING).stream().collect(Collectors.toList());
+        
+        long dueToday = allPending.stream()
+                .filter(t -> t.getSettlementDate().isBefore(todayEnd) || t.getSettlementDate().isEqual(todayEnd))
+                .count();
+        
+        long dueTomorrow = allPending.stream()
+                .filter(t -> t.getSettlementDate().isAfter(todayEnd) && 
+                           (t.getSettlementDate().isBefore(tomorrowEnd) || t.getSettlementDate().isEqual(tomorrowEnd)))
+                .count();
+        
+        long overdue = allPending.stream()
+                .filter(t -> t.getSettlementDate().isBefore(now))
+                .count();
+        
+        return new SettlementSummary(dueToday, dueTomorrow, overdue, allPending.size());
     }
 
     @Transactional
@@ -166,7 +236,7 @@ public class AdminService {
 
     // Task 10.4 - Fraud review
     public Page<FraudAlert> getFlaggedTransactions(Pageable pageable) {
-        Page<FraudAlert> openAlerts = fraudAlertRepository.findByStatus(FraudStatus.OPEN.name(), pageable);
+        Page<FraudAlert> openAlerts = fraudAlertRepository.findByStatus(FraudStatus.OPEN, pageable);
         return openAlerts;
     }
 
@@ -268,7 +338,7 @@ public class AdminService {
         return scheduledJobLogRepository.findAll();
     }
 
-    // Task 10.6 - Reconciliation
+    // Task 10.6 - Reconciliation with today's mismatch detection
     public DailySummary getDailyReconciliation(LocalDate date) {
         return dailySummaryRepository.findBySummaryDate(date)
                 .orElseThrow(() -> new IllegalArgumentException("Daily summary not found for date: " + date));
@@ -277,21 +347,117 @@ public class AdminService {
     public List<DailySummary> getReconciliationReport(LocalDate startDate, LocalDate endDate) {
         return dailySummaryRepository.findBySummaryDateBetween(startDate, endDate);
     }
+    
+    public ReconciliationStatus getTodayReconciliation() {
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        LocalDateTime todayEnd = LocalDate.now().atTime(23, 59, 59);
+        
+        // Get all ledger entries for today
+        List<LedgerEntry> todayEntries = ledgerEntryRepository.findByCreatedAtBetween(todayStart, todayEnd);
+        
+        BigDecimal totalDebits = todayEntries.stream()
+                .filter(e -> e.getType() == LedgerType.DEBIT)
+                .map(LedgerEntry::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal totalCredits = todayEntries.stream()
+                .filter(e -> e.getType() == LedgerType.CREDIT)
+                .map(LedgerEntry::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        long debitCount = todayEntries.stream()
+                .filter(e -> e.getType() == LedgerType.DEBIT)
+                .count();
+        
+        long creditCount = todayEntries.stream()
+                .filter(e -> e.getType() == LedgerType.CREDIT)
+                .count();
+        
+        boolean balanced = totalDebits.compareTo(totalCredits) == 0;
+        BigDecimal mismatch = totalDebits.subtract(totalCredits);
+        
+        return new ReconciliationStatus(totalDebits, totalCredits, debitCount, creditCount, balanced, mismatch);
+    }
 
     // Response DTOs
     public static class DashboardData {
         private final BigDecimal volume30Day;
         private final long usersCount;
         private final long walletsCount;
+        private final long pendingSettlements;
+        private final long flaggedTransactions;
+        private final BigDecimal todayVolume;
+        private final long todayCount;
+        private final long todaySuccessCount;
+        private final long todayFailedCount;
 
-        public DashboardData(BigDecimal volume30Day, long usersCount, long walletsCount) {
+        public DashboardData(BigDecimal volume30Day, long usersCount, long walletsCount, 
+                           long pendingSettlements, long flaggedTransactions,
+                           BigDecimal todayVolume, long todayCount, long todaySuccessCount, long todayFailedCount) {
             this.volume30Day = volume30Day;
             this.usersCount = usersCount;
             this.walletsCount = walletsCount;
+            this.pendingSettlements = pendingSettlements;
+            this.flaggedTransactions = flaggedTransactions;
+            this.todayVolume = todayVolume;
+            this.todayCount = todayCount;
+            this.todaySuccessCount = todaySuccessCount;
+            this.todayFailedCount = todayFailedCount;
         }
 
         public BigDecimal getVolume30Day() { return volume30Day; }
         public long getUsersCount() { return usersCount; }
         public long getWalletsCount() { return walletsCount; }
+        public long getPendingSettlements() { return pendingSettlements; }
+        public long getFlaggedTransactions() { return flaggedTransactions; }
+        public BigDecimal getTodayVolume() { return todayVolume; }
+        public long getTodayCount() { return todayCount; }
+        public long getTodaySuccessCount() { return todaySuccessCount; }
+        public long getTodayFailedCount() { return todayFailedCount; }
+    }
+    
+    public static class SettlementSummary {
+        private final long dueToday;
+        private final long dueTomorrow;
+        private final long overdue;
+        private final long totalPending;
+        
+        public SettlementSummary(long dueToday, long dueTomorrow, long overdue, long totalPending) {
+            this.dueToday = dueToday;
+            this.dueTomorrow = dueTomorrow;
+            this.overdue = overdue;
+            this.totalPending = totalPending;
+        }
+        
+        public long getDueToday() { return dueToday; }
+        public long getDueTomorrow() { return dueTomorrow; }
+        public long getOverdue() { return overdue; }
+        public long getTotalPending() { return totalPending; }
+    }
+    
+    public static class ReconciliationStatus {
+        private final BigDecimal totalDebits;
+        private final BigDecimal totalCredits;
+        private final long debitCount;
+        private final long creditCount;
+        private final boolean balanced;
+        private final BigDecimal mismatch;
+        
+        public ReconciliationStatus(BigDecimal totalDebits, BigDecimal totalCredits, 
+                                   long debitCount, long creditCount, boolean balanced, BigDecimal mismatch) {
+            this.totalDebits = totalDebits;
+            this.totalCredits = totalCredits;
+            this.debitCount = debitCount;
+            this.creditCount = creditCount;
+            this.balanced = balanced;
+            this.mismatch = mismatch;
+        }
+        
+        public BigDecimal getTotalDebits() { return totalDebits; }
+        public BigDecimal getTotalCredits() { return totalCredits; }
+        public long getDebitCount() { return debitCount; }
+        public long getCreditCount() { return creditCount; }
+        public boolean isBalanced() { return balanced; }
+        public BigDecimal getMismatch() { return mismatch; }
     }
 }

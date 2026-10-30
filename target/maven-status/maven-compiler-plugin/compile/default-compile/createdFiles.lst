@@ -4,12 +4,14 @@ com\p2pledger\controller\NotificationController.class
 com\p2pledger\model\DailySummary$DailySummaryBuilder.class
 com\p2pledger\service\TransferService$TransferSummary$Builder.class
 com\p2pledger\model\ScheduledJobStatus.class
+com\p2pledger\service\AdminService$SettlementSummary.class
 com\p2pledger\controller\AuthController.class
 com\p2pledger\service\TransferService$TransferSummary.class
 com\p2pledger\model\ScheduledJobLog.class
 com\p2pledger\repository\NotificationRepository.class
 com\p2pledger\model\LoginAttempts$LoginAttemptsBuilder.class
 com\p2pledger\repository\TransferRepository.class
+com\p2pledger\controller\GlobalExceptionHandler.class
 com\p2pledger\repository\WalletRepository.class
 com\p2pledger\service\WalletService.class
 com\p2pledger\service\ScheduledJobService.class
@@ -58,6 +60,7 @@ com\p2pledger\model\SettlementBatch$SettlementBatchBuilder.class
 com\p2pledger\service\WalletService$WalletDepositResponse.class
 com\p2pledger\service\MaskingService$MaskingStatus.class
 com\p2pledger\P2pPaymentLedgerApplication.class
+com\p2pledger\service\AdminService$ReconciliationStatus.class
 com\p2pledger\model\TransferStatus.class
 com\p2pledger\service\TransferService.class
 com\p2pledger\controller\AuthController$RegisterRequest.class
@@ -75,6 +78,7 @@ com\p2pledger\model\NotificationType.class
 com\p2pledger\controller\MaskingController$PinRequest.class
 com\p2pledger\model\Wallet.class
 com\p2pledger\model\FraudStatus.class
+com\p2pledger\controller\UserController.class
 com\p2pledger\service\NotificationService.class
 com\p2pledger\model\LedgerType.class
 com\p2pledger\model\ScheduledJobLog$ScheduledJobLogBuilder.class

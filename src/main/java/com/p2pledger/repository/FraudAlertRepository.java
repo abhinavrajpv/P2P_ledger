@@ -15,6 +15,13 @@ public interface FraudAlertRepository extends JpaRepository<FraudAlert, Long> {
     List<FraudAlert> findByStatus(String status);
 
     Page<FraudAlert> findByStatus(String status, Pageable pageable);
+    
+    List<FraudAlert> findByStatus(com.p2pledger.model.FraudStatus status);
+
+    Page<FraudAlert> findByStatus(com.p2pledger.model.FraudStatus status, Pageable pageable);
 
     List<FraudAlert> findByTransferIdAndStatus(Long transferId, String status);
+    
+    // Admin enhancements
+    long countByStatus(com.p2pledger.model.FraudStatus status);
 }

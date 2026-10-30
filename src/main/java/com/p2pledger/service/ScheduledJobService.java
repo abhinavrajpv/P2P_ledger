@@ -29,7 +29,7 @@ public class ScheduledJobService {
     private final SettlementBatchRepository settlementBatchRepository;
 
     // Task 11.1 - Hourly settlement job
-    @Scheduled(fixedDelay = 3600000) // Run every hour, wait for previous execution to complete
+    @Scheduled(cron = "0 0 * * * ?") // Run every hour at the top of the hour
     @Transactional
     public void settleEligibleTransfers() {
         String batchId = "SETTLEMENT-" + LocalDateTime.now().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE) + "-" + System.currentTimeMillis();
@@ -131,7 +131,7 @@ public class ScheduledJobService {
     }
 
     // Task 11.3 - Account unlock job
-    @Scheduled(fixedRate = 300000) // Run every 5 minutes
+    @Scheduled(cron = "0 */5 * * * ?") // Run every 5 minutes
     @Transactional
     public void unlockLockedAccounts() {
         String batchId = "ACCOUNT_UNLOCK-" + LocalDateTime.now().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE) + "-" + System.currentTimeMillis();

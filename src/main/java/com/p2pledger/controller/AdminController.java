@@ -12,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -32,6 +33,21 @@ public class AdminController {
     public ResponseEntity<AdminService.DashboardData> getDashboard(Authentication authentication) {
         return ResponseEntity.ok(adminService.getDashboardData());
     }
+    
+    @GetMapping("/users")
+    public ResponseEntity<Page<User>> getAllUsers(Pageable pageable, Authentication authentication) {
+        return ResponseEntity.ok(adminService.getAllUsers(pageable));
+    }
+    
+    @GetMapping("/settlements/summary")
+    public ResponseEntity<AdminService.SettlementSummary> getSettlementSummary(Authentication authentication) {
+        return ResponseEntity.ok(adminService.getSettlementSummary());
+    }
+    
+    @GetMapping("/reconciliation/today")
+    public ResponseEntity<AdminService.ReconciliationStatus> getTodayReconciliation(Authentication authentication) {
+        return ResponseEntity.ok(adminService.getTodayReconciliation());
+    }
 
     @GetMapping("/transactions")
     public ResponseEntity<Page<Transfer>> getTransactions(
@@ -41,10 +57,13 @@ public class AdminController {
             @RequestParam(required = false) Long receiverId,
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate,
+            @RequestParam(required = false) java.math.BigDecimal minAmount,
+            @RequestParam(required = false) java.math.BigDecimal maxAmount,
             Authentication authentication) {
         LocalDateTime startDateTime = startDate != null ? startDate.atStartOfDay() : null;
         LocalDateTime endDateTime = endDate != null ? endDate.atTime(23, 59, 59) : null;
-        return ResponseEntity.ok(adminService.getTransactionsWithFilters(pageable, status, senderId, receiverId, startDateTime, endDateTime));
+        return ResponseEntity.ok(adminService.getTransactionsWithFilters(pageable, status, senderId, receiverId, 
+                startDateTime, endDateTime, minAmount, maxAmount));
     }
 
     @GetMapping("/settlements")

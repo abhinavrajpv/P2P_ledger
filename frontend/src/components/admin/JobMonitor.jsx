@@ -5,23 +5,19 @@ const JobMonitor = () => {
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(false);
     const [jobName, setJobName] = useState('');
-    const [page, setPage] = useState(0);
-    const [totalPages, setTotalPages] = useState(0);
 
-    const fetchJobs = async (page = 0) => {
+    const fetchJobs = async () => {
         setLoading(true);
         try {
             const params = {
-                page,
-                size: 10,
                 jobName: jobName || undefined
             };
             const response = await axios.get('/api/admin/jobs', {
                 params
             });
-            setJobs(response.data);
-            setTotalPages(response.data.totalPages || 1);
-            setPage(page);
+            // Take only the last 20 runs
+            const jobsList = Array.isArray(response.data) ? response.data : [];
+            setJobs(jobsList.slice(0, 20));
         } catch (error) {
             console.error('Failed to fetch job logs:', error.response?.data?.message || error.message);
         } finally {
@@ -29,48 +25,161 @@ const JobMonitor = () => {
         }
     };
 
-    useEffect(() => {
-        fetchJobs();
-    }, []);
-
-    const handlePageChange = (newPage) => {
-        if (newPage >= 0 && newPage < totalPages) {
-            fetchJobs(newPage);
+    const parseJobDetails = (detailsString) => {
+        try {
+            const parsed = JSON.parse(detailsString);
+            return parsed;
+        } catch {
+            return null;
         }
     };
 
+    const formatJobName = (name) => {
+        return name
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+    };
+
+    const isSettlementJob = (jobName) => {
+        return jobName && jobName.toLowerCase().includes('settlement');
+    };
+
+    useEffect(() => {
+        fetchJobs();
+        // Auto-refresh every 30 seconds
+        const interval = setInterval(fetchJobs, 30000);
+        return () => clearInterval(interval);
+    }, []);
+
     return (
         <div className="job-monitor">
-            <h3>Scheduled Job Monitor</h3>
+            <div className="monitor-header">
+                <h3>Scheduled Job Monitor</h3>
+                <small className="last-runs-info">Showing last 20 job executions</small>
+            </div>
             <div className="job-filters">
                 <input
                     type="text"
-                    placeholder="Filter by job name"
+                    placeholder="Filter by job name (e.g., SETTLEMENT)"
                     value={jobName}
                     onChange={(e) => setJobName(e.target.value)}
                 />
-                <button onClick={() => fetchJobs(0)}>Search</button>
+                <button onClick={fetchJobs}>Search</button>
+                <button onClick={() => { setJobName(''); fetchJobs(); }} className="clear-btn">
+                    Clear
+                </button>
             </div>
             {loading && <div className="loading">Loading jobs...</div>}
             {!loading && jobs.length === 0 && <p>No job logs found</p>}
             {!loading && jobs.length > 0 && (
                 <>
                     <div className="jobs-list">
-                        {jobs.map(job => (
-                            <div key={job.id} className="job-item">
-                                <div className="job-info">
-                                    <span className="job-name">{job.jobName}</span>
-                                    <span className={`status-${job.status?.toLowerCase()}`}>{job.status}</span>
-                                    <span className="job-time">{new Date(job.executionTime).toLocaleString()}</span>
+                        {jobs.map(job => {
+                            const details = parseJobDetails(job.details);
+                            const isSettlement = isSettlementJob(job.jobName);
+                            return (
+                                <div key={job.id} className={`job-log ${isSettlement ? 'settlement-job' : ''}`}>
+                                    <div className="job-header">
+                                        <div className="job-name-section">
+                                            {isSettlement && <span className="settlement-badge">💰 Settlement</span>}
+                                            <span className="job-name-label">{formatJobName(job.jobName)}</span>
+                                            <span className={`job-status ${job.status?.toLowerCase()}`}>
+                                                {job.status}
+                                            </span>
+                                        </div>
+                                        <span className="job-time">
+                                            {new Date(job.executionTime).toLocaleString('en-IN')}
+                                        </span>
+                                    </div>
+                                    
+                                    {details && (
+                                        <div className="job-details">
+                                            {details.batchId && (
+                                                <div className="detail-row highlight">
+                                                    <span className="detail-label">Batch ID:</span>
+                                                    <span className="detail-value">{details.batchId}</span>
+                                                </div>
+                                            )}
+                                            {details.processedCount !== undefined && (
+                                                <div className={`detail-row ${isSettlement ? 'highlight' : ''}`}>
+                                                    <span className="detail-label">Processed:</span>
+                                                    <span className="detail-value">{details.processedCount}</span>
+                                                </div>
+                                            )}
+                                            {details.failureCount !== undefined && (
+                                                <div className={`detail-row ${details.failureCount > 0 ? 'error' : ''}`}>
+                                                    <span className="detail-label">Failures:</span>
+                                                    <span className="detail-value">{details.failureCount}</span>
+                                                </div>
+                                            )}
+                                            {details.accountsChecked !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Accounts Checked:</span>
+                                                    <span className="detail-value">{details.accountsChecked}</span>
+                                                </div>
+                                            )}
+                                            {details.accountsUnlocked !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Accounts Unlocked:</span>
+                                                    <span className="detail-value">{details.accountsUnlocked}</span>
+                                                </div>
+                                            )}
+                                            {details.walletsProcessed !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Wallets Processed:</span>
+                                                    <span className="detail-value">{details.walletsProcessed}</span>
+                                                </div>
+                                            )}
+                                            {details.todaySpendingReset !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Spending Reset:</span>
+                                                    <span className="detail-value">{details.todaySpendingReset}</span>
+                                                </div>
+                                            )}
+                                            {details.totalTransfers !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Total Transfers:</span>
+                                                    <span className="detail-value">{details.totalTransfers}</span>
+                                                </div>
+                                            )}
+                                            {details.successfulTransfers !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Successful:</span>
+                                                    <span className="detail-value">{details.successfulTransfers}</span>
+                                                </div>
+                                            )}
+                                            {details.failedTransfers !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Failed:</span>
+                                                    <span className="detail-value">{details.failedTransfers}</span>
+                                                </div>
+                                            )}
+                                            {details.totalAmount !== undefined && (
+                                                <div className="detail-row highlight">
+                                                    <span className="detail-label">Total Amount:</span>
+                                                    <span className="detail-value">₹{details.totalAmount}</span>
+                                                </div>
+                                            )}
+                                            {details.error && (
+                                                <div className="detail-row error">
+                                                    <span className="detail-label">Error:</span>
+                                                    <span className="detail-value">{details.error}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    
+                                    {!details && job.details && (
+                                        <div className="job-details">
+                                            <div className="detail-row">
+                                                <span className="detail-value">{job.details}</span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="job-details">{job.details || 'No details'}</div>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="pagination">
-                        <button onClick={() => handlePageChange(page - 1)} disabled={page === 0}>Previous</button>
-                        <span>Page {page + 1} of {totalPages}</span>
-                        <button onClick={() => handlePageChange(page + 1)} disabled={page >= totalPages - 1}>Next</button>
+                            );
+                        })}
                     </div>
                 </>
             )}

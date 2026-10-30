@@ -28,6 +28,7 @@ import NotificationList from './components/notification/NotificationList'
 
 // Admin
 import DashboardStats from './components/admin/DashboardStats'
+import UserList from './components/admin/UserList'
 import TransactionMonitor from './components/admin/TransactionMonitor'
 import SettlementMonitor from './components/admin/SettlementMonitor'
 import FraudReview from './components/admin/FraudReview'
@@ -146,6 +147,7 @@ function App() {
                             <PrivateRoute requireAdmin>
                                 <div className="dashboard">
                                     <DashboardStats />
+                                    <UserList />
                                     <TransactionMonitor />
                                     <SettlementMonitor />
                                     <FraudReview />

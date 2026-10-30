@@ -35,28 +35,57 @@ const DashboardStats = () => {
     return (
         <div className="dashboard-stats">
             <h3>Dashboard Overview</h3>
-            <div className="stats-grid">
-                <div className="stat-item">
-                    <span className="stat-label">30-Day Volume</span>
-                    <span className="stat-value">₹{parseFloat(stats?.volume30Days || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </div>
-                <div className="stat-item">
-                    <span className="stat-label">Total Users</span>
-                    <span className="stat-value">{stats?.usersCount || 0}</span>
-                </div>
-                <div className="stat-item">
-                    <span className="stat-label">Total Wallets</span>
-                    <span className="stat-value">{stats?.walletsCount || 0}</span>
-                </div>
-                <div className="stat-item">
-                    <span className="stat-label">Pending Settlements</span>
-                    <span className="stat-value">{stats?.pendingSettlements || 0}</span>
-                </div>
-                <div className="stat-item">
-                    <span className="stat-label">Flagged Transactions</span>
-                    <span className="stat-value">{stats?.flaggedTransactions || 0}</span>
+            
+            {/* Today's Stats Section */}
+            <div className="today-stats">
+                <h4>Today's Activity</h4>
+                <div className="stats-grid today-grid">
+                    <div className="stat-item highlight">
+                        <span className="stat-label">Today's Volume</span>
+                        <span className="stat-value">₹{parseFloat(stats?.todayVolume || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="stat-item">
+                        <span className="stat-label">Transactions Today</span>
+                        <span className="stat-value">{stats?.todayCount || 0}</span>
+                    </div>
+                    <div className="stat-item success">
+                        <span className="stat-label">Successful</span>
+                        <span className="stat-value">{stats?.todaySuccessCount || 0}</span>
+                    </div>
+                    <div className="stat-item warning">
+                        <span className="stat-label">Failed</span>
+                        <span className="stat-value">{stats?.todayFailedCount || 0}</span>
+                    </div>
                 </div>
             </div>
+
+            {/* Overall Stats Section */}
+            <div className="overall-stats">
+                <h4>System Overview</h4>
+                <div className="stats-grid">
+                    <div className="stat-item">
+                        <span className="stat-label">30-Day Volume</span>
+                        <span className="stat-value">₹{parseFloat(stats?.volume30Day || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="stat-item">
+                        <span className="stat-label">Total Users</span>
+                        <span className="stat-value">{stats?.usersCount || 0}</span>
+                    </div>
+                    <div className="stat-item">
+                        <span className="stat-label">Total Wallets</span>
+                        <span className="stat-value">{stats?.walletsCount || 0}</span>
+                    </div>
+                    <div className="stat-item attention">
+                        <span className="stat-label">Pending Settlements</span>
+                        <span className="stat-value">{stats?.pendingSettlements || 0}</span>
+                    </div>
+                    <div className="stat-item alert">
+                        <span className="stat-label">Flagged Transactions</span>
+                        <span className="stat-value">{stats?.flaggedTransactions || 0}</span>
+                    </div>
+                </div>
+            </div>
+
             <button onClick={fetchStats} disabled={loading}>
                 {loading ? 'Loading...' : 'Refresh Stats'}
             </button>

@@ -10,4 +10,7 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> 
     List<LedgerEntry> findByTransferId(Long transferId);
 
     List<LedgerEntry> findByUserId(Long userId);
+    
+    // Admin enhancements
+    List<LedgerEntry> findByCreatedAtBetween(java.time.LocalDateTime startDate, java.time.LocalDateTime endDate);
 }
