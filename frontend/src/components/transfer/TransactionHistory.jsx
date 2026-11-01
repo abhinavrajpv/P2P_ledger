@@ -8,20 +8,35 @@ const TransactionHistory = ({ onTransferSelect }) => {
     const [page, setPage] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [maskingEnabled, setMaskingEnabled] = useState(false);
+    
+    // Filter states
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [typeFilter, setTypeFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+    const [showFilters, setShowFilters] = useState(false);
 
     const fetchHistory = async (page = 0) => {
         setLoading(true);
         setError('');
         try {
-            
             // Fetch masking status first
             const maskingResponse = await axios.get('/api/masking/status');
             setMaskingEnabled(maskingResponse.data.enabled);
             
+            // Build query params
+            const params = {
+                page,
+                size: 10
+            };
+            
+            if (startDate) params.startDate = startDate;
+            if (endDate) params.endDate = endDate;
+            if (typeFilter) params.type = typeFilter;
+            if (statusFilter) params.status = statusFilter;
+            
             // Fetch transaction history
-            const response = await axios.get('/api/transfers', {
-                params: { page, size: 10 }
-            });
+            const response = await axios.get('/api/transfers', { params });
             setTransfers(response.data.content);
             setTotalPages(response.data.totalPages);
             setPage(page);
@@ -41,6 +56,19 @@ const TransactionHistory = ({ onTransferSelect }) => {
         if (newPage >= 0 && newPage < totalPages) {
             fetchHistory(newPage);
         }
+    };
+
+    const handleApplyFilters = () => {
+        fetchHistory(0);
+    };
+
+    const handleClearFilters = () => {
+        setStartDate('');
+        setEndDate('');
+        setTypeFilter('');
+        setStatusFilter('');
+        // Trigger fetch with cleared filters
+        setTimeout(() => fetchHistory(0), 0);
     };
 
     // Format counterparty info - masked if masking is enabled
@@ -71,8 +99,66 @@ const TransactionHistory = ({ onTransferSelect }) => {
         <div className="transaction-history">
             <div className="transaction-header">
                 <h3>Transaction History</h3>
-                {maskingEnabled && <span className="masking-indicator" title="Counterparty details are hidden">👤</span>}
+                <div className="header-actions">
+                    <button 
+                        className="filter-toggle-btn"
+                        onClick={() => setShowFilters(!showFilters)}
+                    >
+                        {showFilters ? '▼' : '▶'} Filters
+                    </button>
+                    {maskingEnabled && <span className="masking-indicator" title="Counterparty details are hidden">👤</span>}
+                </div>
             </div>
+
+            {/* Filters Section */}
+            {showFilters && (
+                <div className="filters-panel">
+                    <div className="filter-group">
+                        <label>Date Range:</label>
+                        <div className="date-inputs">
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                placeholder="Start Date"
+                            />
+                            <span>to</span>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                placeholder="End Date"
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="filter-group">
+                        <label>Type:</label>
+                        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                            <option value="">All</option>
+                            <option value="DEBIT">Sent</option>
+                            <option value="CREDIT">Received</option>
+                        </select>
+                    </div>
+                    
+                    <div className="filter-group">
+                        <label>Status:</label>
+                        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                            <option value="">All</option>
+                            <option value="SUCCESS">Success</option>
+                            <option value="PENDING">Pending</option>
+                            <option value="FAILED">Failed</option>
+                            <option value="DECLINED">Declined</option>
+                        </select>
+                    </div>
+                    
+                    <div className="filter-actions">
+                        <button onClick={handleApplyFilters}>Apply Filters</button>
+                        <button onClick={handleClearFilters} className="clear-btn">Clear</button>
+                    </div>
+                </div>
+            )}
+
             {error && <div className="error">{error}</div>}
             {loading && <div className="loading">Loading transactions...</div>}
 
@@ -108,10 +194,12 @@ const TransactionHistory = ({ onTransferSelect }) => {
                                         )}
                                     </div>
                                 </div>
-                                <div className="transfer-meta">
-                                    <span>Settlement: {transfer.settlementDate ? new Date(transfer.settlementDate).toLocaleDateString() : '-'}</span>
-                                    <span>Days Remaining: {transfer.daysUntilSettlement || 0}</span>
-                                </div>
+                                {transfer.status === 'PENDING' && (
+                                    <div className="transfer-meta">
+                                        <span>Settlement: {transfer.settlementDate ? new Date(transfer.settlementDate).toLocaleDateString() : '-'}</span>
+                                        <span>Days Remaining: {transfer.daysUntilSettlement || 0}</span>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

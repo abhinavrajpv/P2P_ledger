@@ -37,15 +37,9 @@ public class TransferController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Transfer> getTransfer(@PathVariable Long id, Authentication authentication) {
+    public ResponseEntity<TransferService.TransferDetailDto> getTransfer(@PathVariable Long id, Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
-        Transfer transfer = transferService.getTransferById(id);
-        
-        // Check if user is sender or receiver
-        if (!transfer.getSenderId().equals(userId) && !transfer.getReceiverId().equals(userId)) {
-            throw new IllegalArgumentException("Access denied");
-        }
-        
+        TransferService.TransferDetailDto transfer = transferService.getTransferDetail(id, userId);
         return ResponseEntity.ok(transfer);
     }
 

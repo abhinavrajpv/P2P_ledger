@@ -138,6 +138,11 @@ const TransferDetail = ({ transferId, onBack }) => {
 
             <div className="ledger-section">
                 <h4>Ledger Entries</h4>
+                {transfer.status === 'PENDING' && (
+                    <div className="pending-note">
+                        <p>⚠️ For pending transfers, only the sender's DEBIT entry exists until settlement.</p>
+                    </div>
+                )}
                 {transfer.ledgerEntries && transfer.ledgerEntries.length > 0 ? (
                     <div className="ledger-list">
                         {transfer.ledgerEntries.map((entry) => (
@@ -151,6 +156,9 @@ const TransferDetail = ({ transferId, onBack }) => {
                                 <div className="ledger-balance">
                                     <span className="balance-before">Balance Before: ₹{entry.balanceBefore.toFixed(2)}</span>
                                     <span className="balance-after">Balance After: ₹{entry.balanceAfter.toFixed(2)}</span>
+                                </div>
+                                <div className="ledger-meta">
+                                    <span>Created: {new Date(entry.createdAt).toLocaleString()}</span>
                                 </div>
                             </div>
                         ))}

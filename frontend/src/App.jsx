@@ -18,6 +18,7 @@ import TransferForm from './components/transfer/TransferForm'
 import TransactionHistory from './components/transfer/TransactionHistory'
 import TransferSummary from './components/transfer/TransferSummary'
 import TransferDetail from './components/transfer/TransferDetail'
+import MiniStatement from './components/transfer/MiniStatement'
 
 // Masking
 import MaskingToggle from './components/masking/MaskingToggle'
@@ -88,11 +89,25 @@ function WalletPage() {
 // Send Money page — UserSearch auto-fills receiver ID in TransferForm
 function TransfersPage() {
     const [selectedReceiverId, setSelectedReceiverId] = useState(null)
+    const [selectedTransferId, setSelectedTransferId] = useState(null)
+    
+    if (selectedTransferId) {
+        return (
+            <div className="dashboard">
+                <TransferDetail 
+                    transferId={selectedTransferId} 
+                    onBack={() => setSelectedTransferId(null)} 
+                />
+            </div>
+        )
+    }
+    
     return (
         <div className="dashboard">
             <TransferForm prefilledReceiverId={selectedReceiverId} onReceiverUsed={() => setSelectedReceiverId(null)} />
             <UserSearch onUserSelect={(user) => setSelectedReceiverId(user.id)} />
-            <TransactionHistory />
+            <MiniStatement />
+            <TransactionHistory onTransferSelect={(transfer) => setSelectedTransferId(transfer.id)} />
             <TransferSummary />
             <MaskingToggle />
         </div>

@@ -383,6 +383,71 @@ public class TransferService {
         return transferRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Transfer not found"));
     }
+    
+    public TransferDetailDto getTransferDetail(Long id, Long requestingUserId) {
+        Transfer transfer = transferRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Transfer not found"));
+        
+        // Check authorization
+        if (!transfer.getSenderId().equals(requestingUserId) && 
+            !transfer.getReceiverId().equals(requestingUserId)) {
+            throw new IllegalArgumentException("Access denied");
+        }
+        
+        // Get ledger entries for this transfer
+        List<LedgerEntry> ledgerEntries = ledgerEntryRepository.findByTransferId(id);
+        
+        // Get user's masking preference
+        User user = userRepository.findById(requestingUserId)
+                .orElse(new User());
+        boolean maskingEnabled = user.isMaskingEnabled();
+        
+        // Get sender and receiver details
+        User sender = userRepository.findById(transfer.getSenderId()).orElse(new User());
+        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(new User());
+        
+        // Build DTO with conditional masking
+        String senderName = maskingEnabled ? null : sender.getName();
+        String senderEmail = maskingEnabled ? null : sender.getEmail();
+        String senderPhone = maskingEnabled ? null : sender.getPhone();
+        String receiverName = maskingEnabled ? null : receiver.getName();
+        String receiverEmail = maskingEnabled ? null : receiver.getEmail();
+        String receiverPhone = maskingEnabled ? null : receiver.getPhone();
+        
+        // Convert ledger entries to DTOs
+        List<LedgerEntryDto> ledgerDtos = ledgerEntries.stream()
+                .map(entry -> new LedgerEntryDto(
+                    entry.getId(),
+                    entry.getTransferId(),
+                    entry.getUserId(),
+                    entry.getType().name(),
+                    entry.getAmount(),
+                    entry.getBalanceBefore(),
+                    entry.getBalanceAfter(),
+                    entry.getCreatedAt()
+                ))
+                .collect(java.util.stream.Collectors.toList());
+        
+        return TransferDetailDto.builder()
+                .id(transfer.getId())
+                .senderId(transfer.getSenderId())
+                .receiverId(transfer.getReceiverId())
+                .amount(transfer.getAmount())
+                .requestId(transfer.getRequestId())
+                .status(transfer.getStatus().name())
+                .createdAt(transfer.getCreatedAt())
+                .settlementDate(transfer.getSettlementDate())
+                .fraudFlagged(transfer.isFraudFlagged())
+                .adminReviewStatus(transfer.getAdminReviewStatus() != null ? transfer.getAdminReviewStatus().name() : null)
+                .senderName(senderName)
+                .senderEmail(senderEmail)
+                .senderPhone(senderPhone)
+                .receiverName(receiverName)
+                .receiverEmail(receiverEmail)
+                .receiverPhone(receiverPhone)
+                .ledgerEntries(ledgerDtos)
+                .build();
+    }
 
     private int calculateDaysUntilSettlement(LocalDateTime settlementDate) {
         if (settlementDate == null) return 0;
@@ -638,5 +703,149 @@ public class TransferService {
                 return new TransferSummary(totalSent, totalReceived, monthlyCount);
             }
         }
+    }
+    
+    // Transfer Detail DTO with Ledger Entries
+    public static class TransferDetailDto {
+        private final Long id;
+        private final Long senderId;
+        private final Long receiverId;
+        private final BigDecimal amount;
+        private final String requestId;
+        private final String status;
+        private final LocalDateTime createdAt;
+        private final LocalDateTime settlementDate;
+        private final Boolean fraudFlagged;
+        private final String adminReviewStatus;
+        private final String senderName;
+        private final String senderEmail;
+        private final String senderPhone;
+        private final String receiverName;
+        private final String receiverEmail;
+        private final String receiverPhone;
+        private final List<LedgerEntryDto> ledgerEntries;
+        
+        public TransferDetailDto(Long id, Long senderId, Long receiverId, BigDecimal amount, String requestId,
+                               String status, LocalDateTime createdAt, LocalDateTime settlementDate,
+                               Boolean fraudFlagged, String adminReviewStatus, String senderName, String senderEmail,
+                               String senderPhone, String receiverName, String receiverEmail, String receiverPhone,
+                               List<LedgerEntryDto> ledgerEntries) {
+            this.id = id;
+            this.senderId = senderId;
+            this.receiverId = receiverId;
+            this.amount = amount;
+            this.requestId = requestId;
+            this.status = status;
+            this.createdAt = createdAt;
+            this.settlementDate = settlementDate;
+            this.fraudFlagged = fraudFlagged;
+            this.adminReviewStatus = adminReviewStatus;
+            this.senderName = senderName;
+            this.senderEmail = senderEmail;
+            this.senderPhone = senderPhone;
+            this.receiverName = receiverName;
+            this.receiverEmail = receiverEmail;
+            this.receiverPhone = receiverPhone;
+            this.ledgerEntries = ledgerEntries;
+        }
+        
+        public Long getId() { return id; }
+        public Long getSenderId() { return senderId; }
+        public Long getReceiverId() { return receiverId; }
+        public BigDecimal getAmount() { return amount; }
+        public String getRequestId() { return requestId; }
+        public String getStatus() { return status; }
+        public LocalDateTime getCreatedAt() { return createdAt; }
+        public LocalDateTime getSettlementDate() { return settlementDate; }
+        public Boolean getFraudFlagged() { return fraudFlagged; }
+        public String getAdminReviewStatus() { return adminReviewStatus; }
+        public String getSenderName() { return senderName; }
+        public String getSenderEmail() { return senderEmail; }
+        public String getSenderPhone() { return senderPhone; }
+        public String getReceiverName() { return receiverName; }
+        public String getReceiverEmail() { return receiverEmail; }
+        public String getReceiverPhone() { return receiverPhone; }
+        public List<LedgerEntryDto> getLedgerEntries() { return ledgerEntries; }
+        
+        public static Builder builder() {
+            return new Builder();
+        }
+        
+        public static class Builder {
+            private Long id;
+            private Long senderId;
+            private Long receiverId;
+            private BigDecimal amount;
+            private String requestId;
+            private String status;
+            private LocalDateTime createdAt;
+            private LocalDateTime settlementDate;
+            private Boolean fraudFlagged;
+            private String adminReviewStatus;
+            private String senderName;
+            private String senderEmail;
+            private String senderPhone;
+            private String receiverName;
+            private String receiverEmail;
+            private String receiverPhone;
+            private List<LedgerEntryDto> ledgerEntries;
+            
+            public Builder id(Long id) { this.id = id; return this; }
+            public Builder senderId(Long senderId) { this.senderId = senderId; return this; }
+            public Builder receiverId(Long receiverId) { this.receiverId = receiverId; return this; }
+            public Builder amount(BigDecimal amount) { this.amount = amount; return this; }
+            public Builder requestId(String requestId) { this.requestId = requestId; return this; }
+            public Builder status(String status) { this.status = status; return this; }
+            public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
+            public Builder settlementDate(LocalDateTime settlementDate) { this.settlementDate = settlementDate; return this; }
+            public Builder fraudFlagged(Boolean fraudFlagged) { this.fraudFlagged = fraudFlagged; return this; }
+            public Builder adminReviewStatus(String adminReviewStatus) { this.adminReviewStatus = adminReviewStatus; return this; }
+            public Builder senderName(String senderName) { this.senderName = senderName; return this; }
+            public Builder senderEmail(String senderEmail) { this.senderEmail = senderEmail; return this; }
+            public Builder senderPhone(String senderPhone) { this.senderPhone = senderPhone; return this; }
+            public Builder receiverName(String receiverName) { this.receiverName = receiverName; return this; }
+            public Builder receiverEmail(String receiverEmail) { this.receiverEmail = receiverEmail; return this; }
+            public Builder receiverPhone(String receiverPhone) { this.receiverPhone = receiverPhone; return this; }
+            public Builder ledgerEntries(List<LedgerEntryDto> ledgerEntries) { this.ledgerEntries = ledgerEntries; return this; }
+            
+            public TransferDetailDto build() {
+                return new TransferDetailDto(id, senderId, receiverId, amount, requestId, status, createdAt,
+                        settlementDate, fraudFlagged, adminReviewStatus, senderName, senderEmail, senderPhone,
+                        receiverName, receiverEmail, receiverPhone, ledgerEntries);
+            }
+        }
+    }
+    
+    // Ledger Entry DTO
+    public static class LedgerEntryDto {
+        private final Long id;
+        private final Long transferId;
+        private final Long userId;
+        private final String type;
+        private final BigDecimal amount;
+        private final BigDecimal balanceBefore;
+        private final BigDecimal balanceAfter;
+        private final LocalDateTime createdAt;
+        
+        public LedgerEntryDto(Long id, Long transferId, Long userId, String type, BigDecimal amount,
+                            BigDecimal balanceBefore, BigDecimal balanceAfter, LocalDateTime createdAt) {
+            this.id = id;
+            this.transferId = transferId;
+            this.userId = userId;
+            this.type = type;
+            this.amount = amount;
+            this.balanceBefore = balanceBefore;
+            this.balanceAfter = balanceAfter;
+            this.createdAt = createdAt;
+        }
+        
+        public Long getId() { return id; }
+        public Long getTransferId() { return transferId; }
+        public Long getUserId() { return userId; }
+        public String getType() { return type; }
+        public BigDecimal getAmount() { return amount; }
+        public BigDecimal getBalanceBefore() { return balanceBefore; }
+        public BigDecimal getBalanceAfter() { return balanceAfter; }
+        public LocalDateTime getCreatedAt() { return createdAt; }
     }
 }

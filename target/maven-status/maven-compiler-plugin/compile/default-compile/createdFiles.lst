@@ -47,6 +47,7 @@ com\p2pledger\service\TransferService$TransferHistoryDto.class
 com\p2pledger\config\JwtAuthenticationFilter.class
 com\p2pledger\model\LedgerEntry.class
 com\p2pledger\model\DailySummary.class
+com\p2pledger\service\TransferService$TransferDetailDto.class
 com\p2pledger\model\Notification.class
 com\p2pledger\controller\WalletController$StatusUpdateRequest.class
 com\p2pledger\controller\AdminController$ProcessSettlementRequest.class
@@ -61,9 +62,11 @@ com\p2pledger\service\WalletService$WalletDepositResponse.class
 com\p2pledger\service\MaskingService$MaskingStatus.class
 com\p2pledger\P2pPaymentLedgerApplication.class
 com\p2pledger\service\AdminService$ReconciliationStatus.class
+com\p2pledger\service\TransferService$LedgerEntryDto.class
 com\p2pledger\model\TransferStatus.class
 com\p2pledger\service\TransferService.class
 com\p2pledger\controller\AuthController$RegisterRequest.class
+com\p2pledger\service\TransferService$TransferDetailDto$Builder.class
 com\p2pledger\model\AuditLog$AuditLogBuilder.class
 com\p2pledger\repository\LoginAttemptsRepository.class
 com\p2pledger\service\JwtService.class
