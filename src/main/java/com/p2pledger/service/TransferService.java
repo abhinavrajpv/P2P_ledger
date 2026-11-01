@@ -413,8 +413,14 @@ public class TransferService {
         Transfer transfer = transferRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Transfer not found"));
         
-        // Check authorization
-        if (!transfer.getSenderId().equals(requestingUserId) && 
+        // Get user's masking preference and role
+        User user = userRepository.findById(requestingUserId)
+                .orElse(new User());
+        boolean maskingEnabled = user.isMaskingEnabled();
+        boolean isAdmin = user.getRole() == Role.ADMIN;
+        
+        // Check authorization - Admin can access any transfer, regular users only their own
+        if (!isAdmin && !transfer.getSenderId().equals(requestingUserId) && 
             !transfer.getReceiverId().equals(requestingUserId)) {
             throw new IllegalArgumentException("Access denied");
         }
@@ -422,16 +428,11 @@ public class TransferService {
         // Get ledger entries for this transfer
         List<LedgerEntry> ledgerEntries = ledgerEntryRepository.findByTransferId(id);
         
-        // Get user's masking preference
-        User user = userRepository.findById(requestingUserId)
-                .orElse(new User());
-        boolean maskingEnabled = user.isMaskingEnabled();
-        
         // Get sender and receiver details
         User sender = userRepository.findById(transfer.getSenderId()).orElse(new User());
         User receiver = userRepository.findById(transfer.getReceiverId()).orElse(new User());
         
-        // Build DTO with conditional masking
+        // Build DTO with conditional masking (admin masking preference still applies)
         String senderName = maskingEnabled ? null : sender.getName();
         String senderEmail = maskingEnabled ? null : sender.getEmail();
         String senderPhone = maskingEnabled ? null : sender.getPhone();
@@ -439,8 +440,10 @@ public class TransferService {
         String receiverEmail = maskingEnabled ? null : receiver.getEmail();
         String receiverPhone = maskingEnabled ? null : receiver.getPhone();
         
-        // Convert ledger entries to DTOs
+        // Filter ledger entries based on user role
+        // Admin can see both sides, regular users can only see their own ledger entry
         List<LedgerEntryDto> ledgerDtos = ledgerEntries.stream()
+                .filter(entry -> isAdmin || entry.getUserId().equals(requestingUserId))
                 .map(entry -> new LedgerEntryDto(
                     entry.getId(),
                     entry.getTransferId(),

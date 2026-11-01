@@ -66,8 +66,27 @@ public class TransferController {
 
     @GetMapping("/{id}/ledger")
     public ResponseEntity<List<com.p2pledger.model.LedgerEntry>> getLedgerEntries(@PathVariable Long id, Authentication authentication) {
-        List<com.p2pledger.model.LedgerEntry> ledgerEntries = transferService.getLedgerEntriesByTransferId(id);
-        return ResponseEntity.ok(ledgerEntries);
+        Long userId = Long.parseLong(authentication.getName());
+        
+        // Get the user to check role
+        com.p2pledger.model.User user = userService.getUserEntityById(userId);
+        boolean isAdmin = user.getRole() == com.p2pledger.model.Role.ADMIN;
+        
+        // Verify the user has access to this transfer
+        Transfer transfer = transferService.getTransferById(id);
+        if (!isAdmin && !transfer.getSenderId().equals(userId) && !transfer.getReceiverId().equals(userId)) {
+            throw new IllegalArgumentException("Access denied");
+        }
+        
+        // Get all ledger entries for the transfer
+        List<com.p2pledger.model.LedgerEntry> allEntries = transferService.getLedgerEntriesByTransferId(id);
+        
+        // Filter: Admin sees all, regular users only see their own
+        List<com.p2pledger.model.LedgerEntry> filteredEntries = allEntries.stream()
+                .filter(entry -> isAdmin || entry.getUserId().equals(userId))
+                .collect(java.util.stream.Collectors.toList());
+        
+        return ResponseEntity.ok(filteredEntries);
     }
 
     public static class CreateTransferRequest {

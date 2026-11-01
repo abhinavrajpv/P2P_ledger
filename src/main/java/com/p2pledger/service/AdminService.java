@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -496,6 +497,49 @@ public class AdminService {
         return new ReconciliationStatus(totalDebits, totalCredits, debitCount, creditCount, 
                 balanced, mismatch, pendingSettlement, pendingCount);
     }
+
+    // Get daily transaction volume chart data for last 30 days
+    public List<DailyVolumeData> getDailyVolumeChart() {
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(29); // Last 30 days including today
+        
+        // Try to get data from daily_summary table first
+        List<DailySummary> summaries = dailySummaryRepository.findBySummaryDateBetween(startDate, endDate);
+        
+        // Create a map for quick lookup
+        Map<LocalDate, DailySummary> summaryMap = summaries.stream()
+                .collect(Collectors.toMap(DailySummary::getSummaryDate, s -> s));
+        
+        List<DailyVolumeData> chartData = new java.util.ArrayList<>();
+        
+        // Generate data for each day
+        for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+            BigDecimal volume;
+            
+            // Check if we have summary data for this date
+            if (summaryMap.containsKey(date)) {
+                volume = summaryMap.get(date).getTotalAmount();
+            } else {
+                // Calculate from transfer table for dates without summary
+                LocalDateTime dayStart = date.atStartOfDay();
+                LocalDateTime dayEnd = date.atTime(23, 59, 59);
+                
+                List<Transfer> dayTransfers = transferRepository.findByCreatedAtBetween(dayStart, dayEnd, Pageable.unpaged())
+                        .getContent()
+                        .stream()
+                        .filter(t -> t.getStatus() == TransferStatus.SUCCESS)
+                        .collect(Collectors.toList());
+                
+                volume = dayTransfers.stream()
+                        .map(Transfer::getAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+            }
+            
+            chartData.add(new DailyVolumeData(date, volume));
+        }
+        
+        return chartData;
+    }
     
     // Get user detail with wallet and recent transactions
     public UserDetail getUserDetail(Long userId) {
@@ -748,5 +792,18 @@ public class AdminService {
         public BigDecimal getWalletBalance() { return walletBalance; }
         public WalletStatus getWalletStatus() { return walletStatus; }
         public List<Transfer> getRecentTransfers() { return recentTransfers; }
+    }
+    
+    public static class DailyVolumeData {
+        private final LocalDate date;
+        private final BigDecimal volume;
+        
+        public DailyVolumeData(LocalDate date, BigDecimal volume) {
+            this.date = date;
+            this.volume = volume;
+        }
+        
+        public LocalDate getDate() { return date; }
+        public BigDecimal getVolume() { return volume; }
     }
 }

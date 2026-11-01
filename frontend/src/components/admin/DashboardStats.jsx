@@ -11,20 +11,20 @@ const DashboardStats = () => {
         setLoading(true);
         setError('');
         try {
-            const response = await axios.get('/api/admin/dashboard');
-            setStats(response.data);
+            const [statsResponse, chartResponse] = await Promise.all([
+                axios.get('/api/admin/dashboard'),
+                axios.get('/api/admin/dashboard/chart')
+            ]);
             
-            // Generate 30-day chart data (mock data for now - can be replaced with real API data)
-            const last30Days = [];
-            for (let i = 29; i >= 0; i--) {
-                const date = new Date();
-                date.setDate(date.getDate() - i);
-                last30Days.push({
-                    date: date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
-                    volume: Math.random() * 50000 // This should come from backend
-                });
-            }
-            setChartData(last30Days);
+            setStats(statsResponse.data);
+            
+            // Transform backend data to chart format
+            const chartData = chartResponse.data.map(item => ({
+                date: new Date(item.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+                volume: parseFloat(item.volume)
+            }));
+            
+            setChartData(chartData);
         } catch (error) {
             const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch dashboard statistics';
             setError(errorMessage);

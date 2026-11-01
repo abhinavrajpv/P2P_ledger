@@ -36,6 +36,11 @@ public class UserService {
                 user.getPhone()
         );
     }
+    
+    public User getUserEntityById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    }
 
     public static class UserSearchResult {
         private final Long id;

@@ -1,3 +1,4 @@
+com\p2pledger\service\AdminService$DailyVolumeData.class
 com\p2pledger\model\FraudAlert.class
 com\p2pledger\service\TransferService$TransferHistoryDto$Builder.class
 com\p2pledger\controller\NotificationController.class

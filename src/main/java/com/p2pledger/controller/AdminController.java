@@ -34,6 +34,11 @@ public class AdminController {
         return ResponseEntity.ok(adminService.getDashboardData());
     }
     
+    @GetMapping("/dashboard/chart")
+    public ResponseEntity<List<AdminService.DailyVolumeData>> getDailyVolumeChart(Authentication authentication) {
+        return ResponseEntity.ok(adminService.getDailyVolumeChart());
+    }
+    
     @GetMapping("/users")
     public ResponseEntity<Page<AdminService.UserWithWallet>> getAllUsers(Pageable pageable, Authentication authentication) {
         return ResponseEntity.ok(adminService.getAllUsersWithWallet(pageable));
