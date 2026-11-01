@@ -46,6 +46,7 @@ public class ScheduledJobService {
 
         int processedCount = 0;
         int failureCount = 0;
+        BigDecimal totalAmount = BigDecimal.ZERO;
 
         try {
             // Find all PENDING transfers whose settlement date has arrived
@@ -59,6 +60,7 @@ public class ScheduledJobService {
                 try {
                     settleTransferInternal(transfer);
                     processedCount++;
+                    totalAmount = totalAmount.add(transfer.getAmount());
                 } catch (Exception e) {
                     failureCount++;
                     // Log error but continue processing other transfers
@@ -69,7 +71,7 @@ public class ScheduledJobService {
             batch.setCompletedAt(LocalDateTime.now());
             batch.setProcessedCount(processedCount);
             batch.setFailureCount(failureCount);
-            batch.setDetails("Processed " + processedCount + " transfers, " + failureCount + " failures");
+            batch.setDetails("Processed " + processedCount + " transfers, " + failureCount + " failures, total amount: " + totalAmount);
         } catch (Exception e) {
             batch.setStatus(SettlementBatchStatus.FAILED);
             batch.setCompletedAt(LocalDateTime.now());
@@ -78,9 +80,9 @@ public class ScheduledJobService {
 
         settlementBatchRepository.save(batch);
 
-        // Log execution
-        String details = String.format("{\"batchId\":\"%s\",\"processedCount\":%d,\"failureCount\":%d}",
-                batchId, processedCount, failureCount);
+        // Log execution with settled count, failed count, and total amount
+        String details = String.format("{\"batchId\":\"%s\",\"processedCount\":%d,\"failureCount\":%d,\"totalAmount\":\"%s\"}",
+                batchId, processedCount, failureCount, totalAmount.toString());
         ScheduledJobLog log = ScheduledJobLog.builder()
                 .jobName("settle_eligible_transfers")
                 .executionTime(LocalDateTime.now())
@@ -366,15 +368,20 @@ public class ScheduledJobService {
         auditLogRepository.save(auditLog);
     }
 
-    // Task 10.5 - Job execution history (delegating to repository)
+    // Task 10.5 - Job execution history (delegating to repository) - Last 20 runs
     public java.util.List<ScheduledJobLog> getJobExecutionHistory(String jobName) {
-        if (jobName != null) {
-            return scheduledJobLogRepository.findByJobNameOrderByExecutionTimeDesc(jobName);
+        org.springframework.data.domain.Pageable pageable = 
+            org.springframework.data.domain.PageRequest.of(0, 20);
+        
+        if (jobName != null && !jobName.trim().isEmpty()) {
+            return scheduledJobLogRepository.findTop20ByJobNameOrderByExecutionTimeDesc(jobName, pageable);
         }
-        return scheduledJobLogRepository.findAll();
+        return scheduledJobLogRepository.findTop20ByOrderByExecutionTimeDesc(pageable);
     }
 
     public java.util.List<ScheduledJobLog> getAllJobExecutionHistory() {
-        return scheduledJobLogRepository.findAll();
+        org.springframework.data.domain.Pageable pageable = 
+            org.springframework.data.domain.PageRequest.of(0, 20);
+        return scheduledJobLogRepository.findTop20ByOrderByExecutionTimeDesc(pageable);
     }
 }

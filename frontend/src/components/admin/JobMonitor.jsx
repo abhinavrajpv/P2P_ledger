@@ -15,9 +15,9 @@ const JobMonitor = () => {
             const response = await axios.get('/api/admin/jobs', {
                 params
             });
-            // Take only the last 20 runs
+            // The backend now returns only the last 20 runs
             const jobsList = Array.isArray(response.data) ? response.data : [];
-            setJobs(jobsList.slice(0, 20));
+            setJobs(jobsList);
         } catch (error) {
             console.error('Failed to fetch job logs:', error.response?.data?.message || error.message);
         } finally {
@@ -101,18 +101,45 @@ const JobMonitor = () => {
                                                     <span className="detail-value">{details.batchId}</span>
                                                 </div>
                                             )}
-                                            {details.processedCount !== undefined && (
-                                                <div className={`detail-row ${isSettlement ? 'highlight' : ''}`}>
+                                            
+                                            {/* Settlement Job Stats - Highlighted */}
+                                            {isSettlement && (
+                                                <>
+                                                    {details.processedCount !== undefined && (
+                                                        <div className="detail-row settlement-stat success">
+                                                            <span className="detail-label">✅ Settled Count:</span>
+                                                            <span className="detail-value">{details.processedCount}</span>
+                                                        </div>
+                                                    )}
+                                                    {details.failureCount !== undefined && (
+                                                        <div className={`detail-row settlement-stat ${details.failureCount > 0 ? 'error' : ''}`}>
+                                                            <span className="detail-label">❌ Failed Count:</span>
+                                                            <span className="detail-value">{details.failureCount}</span>
+                                                        </div>
+                                                    )}
+                                                    {details.totalAmount !== undefined && (
+                                                        <div className="detail-row settlement-stat highlight">
+                                                            <span className="detail-label">💵 Total Amount:</span>
+                                                            <span className="detail-value">₹{details.totalAmount}</span>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                            
+                                            {/* Other job stats */}
+                                            {!isSettlement && details.processedCount !== undefined && (
+                                                <div className="detail-row">
                                                     <span className="detail-label">Processed:</span>
                                                     <span className="detail-value">{details.processedCount}</span>
                                                 </div>
                                             )}
-                                            {details.failureCount !== undefined && (
+                                            {!isSettlement && details.failureCount !== undefined && (
                                                 <div className={`detail-row ${details.failureCount > 0 ? 'error' : ''}`}>
                                                     <span className="detail-label">Failures:</span>
                                                     <span className="detail-value">{details.failureCount}</span>
                                                 </div>
                                             )}
+                                            
                                             {details.accountsChecked !== undefined && (
                                                 <div className="detail-row">
                                                     <span className="detail-label">Accounts Checked:</span>
@@ -155,7 +182,7 @@ const JobMonitor = () => {
                                                     <span className="detail-value">{details.failedTransfers}</span>
                                                 </div>
                                             )}
-                                            {details.totalAmount !== undefined && (
+                                            {!isSettlement && details.totalAmount !== undefined && (
                                                 <div className="detail-row highlight">
                                                     <span className="detail-label">Total Amount:</span>
                                                     <span className="detail-value">₹{details.totalAmount}</span>

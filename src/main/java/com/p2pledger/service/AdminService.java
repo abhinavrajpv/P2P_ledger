@@ -394,31 +394,63 @@ public class AdminService {
         LocalDateTime todayStart = LocalDate.now().atStartOfDay();
         LocalDateTime todayEnd = LocalDate.now().atTime(23, 59, 59);
         
+        // Only get ledger entries for SUCCESSFUL transfers (exclude deposits and refunds)
+        // Get all successful transfers from today
+        List<Transfer> todaySuccessfulTransfers = transferRepository.findByCreatedAtBetween(todayStart, todayEnd, Pageable.unpaged())
+                .getContent()
+                .stream()
+                .filter(t -> t.getStatus() == TransferStatus.SUCCESS)
+                .collect(Collectors.toList());
+        
+        // Get the transfer IDs
+        List<Long> successfulTransferIds = todaySuccessfulTransfers.stream()
+                .map(Transfer::getId)
+                .collect(Collectors.toList());
+        
         // Get all ledger entries for today
         List<LedgerEntry> todayEntries = ledgerEntryRepository.findByCreatedAtBetween(todayStart, todayEnd);
         
-        BigDecimal totalDebits = todayEntries.stream()
+        // Filter to only include entries for successful transfers
+        List<LedgerEntry> transferEntries = todayEntries.stream()
+                .filter(e -> e.getTransferId() != null && successfulTransferIds.contains(e.getTransferId()))
+                .collect(Collectors.toList());
+        
+        BigDecimal totalDebits = transferEntries.stream()
                 .filter(e -> e.getType() == LedgerType.DEBIT)
                 .map(LedgerEntry::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         
-        BigDecimal totalCredits = todayEntries.stream()
+        BigDecimal totalCredits = transferEntries.stream()
                 .filter(e -> e.getType() == LedgerType.CREDIT)
                 .map(LedgerEntry::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         
-        long debitCount = todayEntries.stream()
+        long debitCount = transferEntries.stream()
                 .filter(e -> e.getType() == LedgerType.DEBIT)
                 .count();
         
-        long creditCount = todayEntries.stream()
+        long creditCount = transferEntries.stream()
                 .filter(e -> e.getType() == LedgerType.CREDIT)
                 .count();
+        
+        // Get pending settlement amount for today's transfers
+        List<Transfer> todayPendingTransfers = transferRepository.findByCreatedAtBetween(todayStart, todayEnd, Pageable.unpaged())
+                .getContent()
+                .stream()
+                .filter(t -> t.getStatus() == TransferStatus.PENDING)
+                .collect(Collectors.toList());
+        
+        BigDecimal pendingSettlement = todayPendingTransfers.stream()
+                .map(Transfer::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        long pendingCount = todayPendingTransfers.size();
         
         boolean balanced = totalDebits.compareTo(totalCredits) == 0;
         BigDecimal mismatch = totalDebits.subtract(totalCredits);
         
-        return new ReconciliationStatus(totalDebits, totalCredits, debitCount, creditCount, balanced, mismatch);
+        return new ReconciliationStatus(totalDebits, totalCredits, debitCount, creditCount, 
+                balanced, mismatch, pendingSettlement, pendingCount);
     }
     
     // Get user detail with wallet and recent transactions
@@ -567,15 +599,20 @@ public class AdminService {
         private final long creditCount;
         private final boolean balanced;
         private final BigDecimal mismatch;
+        private final BigDecimal pendingSettlement;
+        private final long pendingCount;
         
         public ReconciliationStatus(BigDecimal totalDebits, BigDecimal totalCredits, 
-                                   long debitCount, long creditCount, boolean balanced, BigDecimal mismatch) {
+                                   long debitCount, long creditCount, boolean balanced, BigDecimal mismatch,
+                                   BigDecimal pendingSettlement, long pendingCount) {
             this.totalDebits = totalDebits;
             this.totalCredits = totalCredits;
             this.debitCount = debitCount;
             this.creditCount = creditCount;
             this.balanced = balanced;
             this.mismatch = mismatch;
+            this.pendingSettlement = pendingSettlement;
+            this.pendingCount = pendingCount;
         }
         
         public BigDecimal getTotalDebits() { return totalDebits; }
@@ -584,6 +621,8 @@ public class AdminService {
         public long getCreditCount() { return creditCount; }
         public boolean isBalanced() { return balanced; }
         public BigDecimal getMismatch() { return mismatch; }
+        public BigDecimal getPendingSettlement() { return pendingSettlement; }
+        public long getPendingCount() { return pendingCount; }
     }
     
     public static class UserWithWallet {
