@@ -42,11 +42,14 @@ const NotificationList = () => {
         fetchNotifications(0);
     }, []);
 
-    const handleMarkAsRead = (notificationId) => {
-        // Optimistically update UI
+    const handleMarkAsRead = async (notificationId) => {
+        // Optimistically update UI to mark as read
         setNotifications(prev => 
             prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
         );
+        
+        // Trigger a custom event to notify UnreadCountBadge to refresh
+        window.dispatchEvent(new CustomEvent('notificationRead'));
     };
 
     const handlePageChange = (newPage) => {

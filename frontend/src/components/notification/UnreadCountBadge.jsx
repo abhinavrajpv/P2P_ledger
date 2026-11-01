@@ -17,9 +17,20 @@ const UnreadCountBadge = ({ inline = false }) => {
 
     useEffect(() => {
         fetchUnreadCount();
+        
         // Poll every 30 seconds
         const interval = setInterval(fetchUnreadCount, 30000);
-        return () => clearInterval(interval);
+        
+        // Listen for custom event when notification is marked as read
+        const handleNotificationRead = () => {
+            fetchUnreadCount();
+        };
+        window.addEventListener('notificationRead', handleNotificationRead);
+        
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('notificationRead', handleNotificationRead);
+        };
     }, []);
 
     if (unreadCount === 0) return null;

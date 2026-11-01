@@ -3,27 +3,26 @@ import axios from 'axios';
 
 const MarkAsRead = ({ notificationId, onMarked }) => {
     const [loading, setLoading] = useState(false);
-    const [success, setSuccess] = useState(false);
 
     const markAsRead = async () => {
         setLoading(true);
         try {
-            await axios.patch(`/api/notifications/${notificationId}/read`, {});
-            setSuccess(true);
-            onMarked?.();
+            await axios.patch(`/api/notifications/${notificationId}/read`);
+            // Call parent to update the notification state
+            if (onMarked) {
+                onMarked();
+            }
         } catch (error) {
-            console.error('Failed to mark notification as read');
+            console.error('Failed to mark notification as read:', error);
+            const errorMsg = error.response?.data?.message || 'Failed to mark as read. Please try again.';
+            alert(errorMsg);
         } finally {
             setLoading(false);
         }
     };
 
-    if (success) {
-        return <span className="marked-read">Read</span>;
-    }
-
     return (
-        <button onClick={markAsRead} disabled={loading}>
+        <button onClick={markAsRead} disabled={loading} className="mark-read-btn">
             {loading ? 'Marking...' : 'Mark as Read'}
         </button>
     );

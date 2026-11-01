@@ -284,11 +284,22 @@ public class ScheduledJobService {
         transfer.setStatus(TransferStatus.SUCCESS);
         transferRepository.save(transfer);
 
+        // Get sender and receiver names for notifications
+        User sender = userRepository.findById(transfer.getSenderId()).orElse(null);
+        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(null);
+        String senderName = sender != null ? sender.getName() : "User #" + transfer.getSenderId();
+        String receiverName = receiver != null ? receiver.getName() : "User #" + transfer.getReceiverId();
+
         // Create notification to both sender and receiver
+        System.out.println("DEBUG: Creating settlement notifications for transfer ID: " + transfer.getId());
+        System.out.println("DEBUG: Sender ID: " + transfer.getSenderId() + ", Receiver ID: " + transfer.getReceiverId());
+        
         createNotification(transfer.getSenderId(), NotificationType.SETTLEMENT,
-                "Transfer of ₹" + amount + " settled successfully");
+                "₹" + amount + " transfer to " + receiverName + " has been settled");
         createNotification(transfer.getReceiverId(), NotificationType.SETTLEMENT,
-                "Received ₹" + amount + " from " + transfer.getSenderId());
+                "₹" + amount + " received from " + senderName);
+        
+        System.out.println("DEBUG: Settlement notifications created successfully");
     }
 
     // Internal refund method (reused for settlement failures)
@@ -339,10 +350,13 @@ public class ScheduledJobService {
             fraudAlertRepository.save(fraudAlert);
         }
 
+        // Get receiver name for notification
+        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(null);
+        String receiverName = receiver != null ? receiver.getName() : "User #" + transfer.getReceiverId();
+
+        // Create notification only for sender (receiver doesn't need to know about failed transfers)
         createNotification(transfer.getSenderId(), NotificationType.REFUND,
-                "Transfer of ₹" + amount + " refunded: receiver wallet not active");
-        createNotification(transfer.getReceiverId(), NotificationType.REFUND,
-                "Transfer of ₹" + amount + " to you was refunded: receiver wallet not active");
+                "₹" + amount + " transfer to " + receiverName + " failed. Amount refunded to your wallet");
     }
 
     private void createNotification(Long userId, NotificationType type, String message) {

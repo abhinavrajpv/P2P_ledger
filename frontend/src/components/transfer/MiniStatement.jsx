@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from '../../axiosConfig';
 
 const MiniStatement = () => {
     const [transfers, setTransfers] = useState([]);

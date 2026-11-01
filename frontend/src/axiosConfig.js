@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getToken } from './auth';
+import { getToken, clearAuth } from './auth';
 
 /**
  * Global Axios request interceptor.
@@ -15,6 +15,23 @@ axios.interceptors.request.use(
         return config;
     },
     (error) => Promise.reject(error)
+);
+
+/**
+ * Global Axios response interceptor.
+ * Handles 401/403 errors by clearing auth and redirecting to login.
+ */
+axios.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+            // Token expired or invalid - clear auth and reload to show login
+            console.error('Authentication error - clearing session');
+            clearAuth();
+            window.location.href = '/';
+        }
+        return Promise.reject(error);
+    }
 );
 
 export default axios;

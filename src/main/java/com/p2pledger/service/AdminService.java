@@ -268,6 +268,31 @@ public class AdminService {
         transfer.setStatus(TransferStatus.SUCCESS);
         transferRepository.save(transfer);
 
+        // Get sender and receiver names for notifications
+        User sender = userRepository.findById(transfer.getSenderId()).orElse(null);
+        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(null);
+        String senderName = sender != null ? sender.getName() : "User #" + transfer.getSenderId();
+        String receiverName = receiver != null ? receiver.getName() : "User #" + transfer.getReceiverId();
+
+        // Create notifications for both sender and receiver
+        Notification senderNotification = Notification.builder()
+                .userId(transfer.getSenderId())
+                .type(NotificationType.SETTLEMENT)
+                .message("₹" + amount + " transfer to " + receiverName + " has been settled")
+                .isRead(false)
+                .createdAt(LocalDateTime.now())
+                .build();
+        notificationRepository.save(senderNotification);
+
+        Notification receiverNotification = Notification.builder()
+                .userId(transfer.getReceiverId())
+                .type(NotificationType.SETTLEMENT)
+                .message("₹" + amount + " received from " + senderName)
+                .isRead(false)
+                .createdAt(LocalDateTime.now())
+                .build();
+        notificationRepository.save(receiverNotification);
+
         return transfer;
     }
 
@@ -368,6 +393,20 @@ public class AdminService {
             fraudAlert.setReviewedAt(LocalDateTime.now());
             fraudAlertRepository.save(fraudAlert);
         }
+
+        // Get receiver name for notification
+        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(null);
+        String receiverName = receiver != null ? receiver.getName() : "User #" + transfer.getReceiverId();
+        
+        // Create notification only for sender (receiver doesn't need to know about failed transfers)
+        Notification senderNotification = Notification.builder()
+                .userId(transfer.getSenderId())
+                .type(NotificationType.REFUND)
+                .message("₹" + amount + " transfer to " + receiverName + " failed. Amount refunded to your wallet")
+                .isRead(false)
+                .createdAt(LocalDateTime.now())
+                .build();
+        notificationRepository.save(senderNotification);
 
         return transfer;
     }

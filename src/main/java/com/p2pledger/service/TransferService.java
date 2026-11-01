@@ -137,6 +137,9 @@ public class TransferService {
             transfer.setFraudFlagged(true);
             transfer.setAdminReviewStatus(AdminReviewStatus.PENDING);
             transferRepository.save(transfer);
+            
+            // Notify all admins about the fraud alert
+            notifyAdminsAboutFraudAlert(transfer, sender);
         }
 
         // Create notification for sender
@@ -210,10 +213,17 @@ public class TransferService {
         transferRepository.save(transfer);
 
         // Create notification to both sender and receiver
+        User sender = userRepository.findById(transfer.getSenderId()).orElse(null);
+        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(null);
+        String senderName = sender != null ? sender.getName() : "User #" + transfer.getSenderId();
+        String receiverName = receiver != null ? receiver.getName() : "User #" + transfer.getReceiverId();
+        
+        System.out.println("DEBUG: Creating settlement notifications (TransferService) for transfer ID: " + transfer.getId());
+        
         createNotification(transfer.getSenderId(), NotificationType.SETTLEMENT,
-                "Transfer of ₹" + amount + " settled successfully");
+                "₹" + amount + " transfer to " + receiverName + " has been settled");
         createNotification(transfer.getReceiverId(), NotificationType.SETTLEMENT,
-                "Received ₹" + amount + " from " + transfer.getSenderId());
+                "₹" + amount + " received from " + senderName);
 
         return transfer;
     }
@@ -277,11 +287,12 @@ public class TransferService {
             fraudAlertRepository.save(fraudAlert);
         }
 
-        // Create notifications
+        // Create notification only for sender (receiver doesn't need to know about failed transfers)
+        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(null);
+        String receiverName = receiver != null ? receiver.getName() : "User #" + transfer.getReceiverId();
+        
         createNotification(transfer.getSenderId(), NotificationType.REFUND,
-                "Transfer of ₹" + amount + " refunded");
-        createNotification(transfer.getReceiverId(), NotificationType.REFUND,
-                "Transfer of ₹" + amount + " to you was refunded");
+                "₹" + amount + " transfer to " + receiverName + " failed. Amount refunded to your wallet");
 
         // Update audit log
         createAuditLog(transfer.getSenderId(), "TRANSFER_REFUNDED", "Transfer", transferId.toString(),
@@ -339,6 +350,13 @@ public class TransferService {
             
             // Determine type from the perspective of userId
             String transferType = transfer.getSenderId().equals(userId) ? "DEBIT" : "CREDIT";
+            
+            // IMPORTANT: Receiver should NOT see PENDING or DECLINED transfers
+            // (they don't know about incoming money until it's successfully settled)
+            if (transferType.equals("CREDIT") && 
+                (transfer.getStatus() == TransferStatus.PENDING || transfer.getStatus() == TransferStatus.DECLINED)) {
+                return null; // Filter out - receiver doesn't see pending or failed incoming transfers
+            }
             
             // Apply type filter (client-side since it's perspective-based)
             if (type != null && !type.isEmpty() && !type.equalsIgnoreCase(transferType)) {
@@ -495,6 +513,20 @@ public class TransferService {
                 .createdAt(LocalDateTime.now())
                 .build();
         fraudAlertRepository.save(alert);
+    }
+    
+    private void notifyAdminsAboutFraudAlert(Transfer transfer, User sender) {
+        // Get all admin users
+        List<User> admins = userRepository.findAll().stream()
+                .filter(u -> u.getRole() == Role.ADMIN)
+                .collect(java.util.stream.Collectors.toList());
+        
+        // Send notification to each admin
+        for (User admin : admins) {
+            createNotification(admin.getId(), NotificationType.FRAUD_ALERT,
+                    "High-value transaction flagged: ₹" + transfer.getAmount() + 
+                    " by User #" + sender.getId() + " (" + sender.getName() + ")");
+        }
     }
 
     private void createNotification(Long userId, NotificationType type, String message) {

@@ -1,5 +1,6 @@
 package com.p2pledger.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -30,9 +31,15 @@ public class Notification {
     @Column(nullable = false)
     private String message;
 
+    @JsonProperty("isRead")
     @Column(name = "is_read", nullable = false)
     private boolean isRead;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+    
+    // Custom setter to handle both isRead and read property names
+    public void setRead(boolean read) {
+        this.isRead = read;
+    }
 }
