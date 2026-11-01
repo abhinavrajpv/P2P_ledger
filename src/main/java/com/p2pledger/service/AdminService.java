@@ -229,10 +229,8 @@ public class AdminService {
             throw new IllegalArgumentException("Transfer requires admin approval before settlement");
         }
 
-        // Check if settlement date has arrived
-        if (transfer.getSettlementDate().isAfter(LocalDateTime.now())) {
-            throw new IllegalArgumentException("Transfer settlement date has not arrived");
-        }
+        // Admin can manually trigger settlement regardless of settlement date
+        // This allows resolving system issues that caused delays
 
         Wallet senderWallet = walletRepository.findByUserId(transfer.getSenderId())
                 .orElseThrow(() -> new IllegalArgumentException("Sender wallet not found"));
