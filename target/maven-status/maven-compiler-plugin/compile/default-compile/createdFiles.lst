@@ -57,6 +57,7 @@ com\p2pledger\annotation\RequirePin.class
 com\p2pledger\model\Transfer$TransferBuilder.class
 com\p2pledger\service\WalletService$WalletDepositResponse$Builder.class
 com\p2pledger\controller\MaskingController.class
+com\p2pledger\service\FraudNotificationService.class
 com\p2pledger\model\AdminReviewStatus.class
 com\p2pledger\model\SettlementBatch$SettlementBatchBuilder.class
 com\p2pledger\service\WalletService$WalletDepositResponse.class

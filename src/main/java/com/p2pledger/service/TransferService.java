@@ -31,6 +31,7 @@ public class TransferService {
     private final AuditLogRepository auditLogRepository;
     private final WalletService walletService;
     private final PasswordEncoder passwordEncoder;
+    private final FraudNotificationService fraudNotificationService;
 
     @Transactional
     @RequirePin(message = "Invalid transaction PIN", userIdIndex = 0, pinIndex = 4)
@@ -86,12 +87,18 @@ public class TransferService {
 
         // Check for suspected duplicates (same receiver, same amount, within 2 minutes)
         if (isSuspectedDuplicate(senderId, receiverId, amount)) {
+            // Notify all admins about the duplicate transaction attempt (in separate transaction)
+            fraudNotificationService.notifyAdminsAboutDuplicateTransfer(
+                    senderId, sender.getName(), receiverId, receiver.getName(), amount);
             throw new IllegalArgumentException("Suspected duplicate transfer detected");
         }
 
         // Check daily spending limit
         BigDecimal todaySpending = senderWallet.getTodaySpending();
         if (todaySpending.add(amount).compareTo(DAILY_LIMIT) > 0) {
+            // Notify all admins about the daily limit violation attempt (in separate transaction)
+            fraudNotificationService.notifyAdminsAboutDailyLimitViolation(
+                    senderId, sender.getName(), amount, todaySpending, DAILY_LIMIT);
             throw new IllegalArgumentException("Daily spending limit exceeded");
         }
 
