@@ -194,22 +194,27 @@ public class AdminService {
     
     public SettlementSummary getSettlementSummary() {
         LocalDateTime now = LocalDateTime.now();
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
         LocalDateTime todayEnd = LocalDate.now().atTime(23, 59, 59);
         LocalDateTime tomorrowEnd = LocalDate.now().plusDays(1).atTime(23, 59, 59);
         
         List<Transfer> allPending = transferRepository.findByStatus(TransferStatus.PENDING).stream().collect(Collectors.toList());
         
-        long dueToday = allPending.stream()
-                .filter(t -> t.getSettlementDate().isBefore(todayEnd) || t.getSettlementDate().isEqual(todayEnd))
+        // Overdue: Settlement date is BEFORE today (before 00:00 today)
+        long overdue = allPending.stream()
+                .filter(t -> t.getSettlementDate().isBefore(todayStart))
                 .count();
         
+        // Due today: Settlement date is anytime TODAY (00:00 to 23:59 today)
+        long dueToday = allPending.stream()
+                .filter(t -> !t.getSettlementDate().isBefore(todayStart) && 
+                           (t.getSettlementDate().isBefore(todayEnd) || t.getSettlementDate().isEqual(todayEnd)))
+                .count();
+        
+        // Due tomorrow: Settlement date is anytime TOMORROW
         long dueTomorrow = allPending.stream()
                 .filter(t -> t.getSettlementDate().isAfter(todayEnd) && 
                            (t.getSettlementDate().isBefore(tomorrowEnd) || t.getSettlementDate().isEqual(tomorrowEnd)))
-                .count();
-        
-        long overdue = allPending.stream()
-                .filter(t -> t.getSettlementDate().isBefore(now))
                 .count();
         
         return new SettlementSummary(dueToday, dueTomorrow, overdue, allPending.size());
