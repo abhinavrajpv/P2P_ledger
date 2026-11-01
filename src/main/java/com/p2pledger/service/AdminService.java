@@ -278,7 +278,11 @@ public class AdminService {
     }
 
     @Transactional
-    public Transfer approveTransaction(Long transferId) {
+    public Transfer approveTransaction(Long fraudAlertId) {
+        FraudAlert fraudAlert = fraudAlertRepository.findById(fraudAlertId)
+                .orElseThrow(() -> new IllegalArgumentException("Fraud alert not found"));
+        
+        Long transferId = fraudAlert.getTransferId();
         Transfer transfer = transferRepository.findById(transferId)
                 .orElseThrow(() -> new IllegalArgumentException("Transfer not found"));
 
@@ -286,13 +290,10 @@ public class AdminService {
             throw new IllegalArgumentException("Transfer is not pending admin review");
         }
 
-        // Update fraud alert if exists
-        FraudAlert fraudAlert = fraudAlertRepository.findByTransferId(transferId).orElse(null);
-        if (fraudAlert != null) {
-            fraudAlert.setStatus(FraudStatus.APPROVED);
-            fraudAlert.setReviewedAt(LocalDateTime.now());
-            fraudAlertRepository.save(fraudAlert);
-        }
+        // Update fraud alert
+        fraudAlert.setStatus(FraudStatus.APPROVED);
+        fraudAlert.setReviewedAt(LocalDateTime.now());
+        fraudAlertRepository.save(fraudAlert);
 
         transfer.setAdminReviewStatus(AdminReviewStatus.APPROVED);
         transferRepository.save(transfer);
@@ -301,7 +302,11 @@ public class AdminService {
     }
 
     @Transactional
-    public Transfer refundTransaction(Long transferId) {
+    public Transfer refundTransaction(Long fraudAlertId) {
+        FraudAlert fraudAlert = fraudAlertRepository.findById(fraudAlertId)
+                .orElseThrow(() -> new IllegalArgumentException("Fraud alert not found"));
+        
+        Long transferId = fraudAlert.getTransferId();
         Transfer transfer = transferRepository.findById(transferId)
                 .orElseThrow(() -> new IllegalArgumentException("Transfer not found"));
 
