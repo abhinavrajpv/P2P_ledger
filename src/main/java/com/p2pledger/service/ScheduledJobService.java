@@ -63,6 +63,14 @@ public class ScheduledJobService {
                     if (transfer.getAdminReviewStatus() == AdminReviewStatus.PENDING) {
                         transfer.setAdminReviewStatus(AdminReviewStatus.APPROVED);
                         transferRepository.save(transfer);
+                        
+                        // Update fraud alert status to APPROVED (auto-approved by system)
+                        FraudAlert fraudAlert = fraudAlertRepository.findByTransferId(transfer.getId()).orElse(null);
+                        if (fraudAlert != null && fraudAlert.getStatus() == FraudStatus.OPEN) {
+                            fraudAlert.setStatus(FraudStatus.APPROVED);
+                            fraudAlert.setReviewedAt(LocalDateTime.now());
+                            fraudAlertRepository.save(fraudAlert);
+                        }
                     }
                     
                     settleTransferInternal(transfer);

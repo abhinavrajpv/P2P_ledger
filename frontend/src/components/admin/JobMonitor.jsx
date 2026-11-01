@@ -6,6 +6,15 @@ const JobMonitor = () => {
     const [loading, setLoading] = useState(false);
     const [jobName, setJobName] = useState('');
 
+    // Available job names in the system
+    const jobOptions = [
+        { value: '', label: 'All Jobs' },
+        { value: 'settle_eligible_transfers', label: '💰 Settle Eligible Transfers' },
+        { value: 'reset_daily_limits', label: '🔄 Reset Daily Limits' },
+        { value: 'unlock_locked_accounts', label: '🔓 Unlock Locked Accounts' },
+        { value: 'generate_daily_summary', label: '📊 Generate Daily Summary' }
+    ];
+
     const fetchJobs = async () => {
         setLoading(true);
         try {
@@ -47,6 +56,9 @@ const JobMonitor = () => {
 
     useEffect(() => {
         fetchJobs();
+    }, [jobName]);
+
+    useEffect(() => {
         // Auto-refresh every 30 seconds
         const interval = setInterval(fetchJobs, 30000);
         return () => clearInterval(interval);
@@ -59,16 +71,20 @@ const JobMonitor = () => {
                 <small className="last-runs-info">Showing last 20 job executions</small>
             </div>
             <div className="job-filters">
-                <input
-                    type="text"
-                    placeholder="Filter by job name (e.g., SETTLEMENT)"
+                <label htmlFor="job-select" className="filter-label">Filter by Job Type:</label>
+                <select 
+                    id="job-select"
+                    className="job-select"
                     value={jobName}
                     onChange={(e) => setJobName(e.target.value)}
-                />
-                <button onClick={fetchJobs}>Search</button>
-                <button onClick={() => { setJobName(''); fetchJobs(); }} className="clear-btn">
-                    Clear
-                </button>
+                >
+                    {jobOptions.map(option => (
+                        <option key={option.value} value={option.value}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+                <button onClick={fetchJobs} className="refresh-btn">🔄 Refresh</button>
             </div>
             {loading && <div className="loading">Loading jobs...</div>}
             {!loading && jobs.length === 0 && <p>No job logs found</p>}
