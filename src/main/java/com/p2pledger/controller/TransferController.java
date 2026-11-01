@@ -64,6 +64,12 @@ public class TransferController {
         return ResponseEntity.ok(summary);
     }
 
+    @GetMapping("/{id}/ledger")
+    public ResponseEntity<List<com.p2pledger.model.LedgerEntry>> getLedgerEntries(@PathVariable Long id, Authentication authentication) {
+        List<com.p2pledger.model.LedgerEntry> ledgerEntries = transferService.getLedgerEntriesByTransferId(id);
+        return ResponseEntity.ok(ledgerEntries);
+    }
+
     public static class CreateTransferRequest {
         private Long receiverId;
         private java.math.BigDecimal amount;

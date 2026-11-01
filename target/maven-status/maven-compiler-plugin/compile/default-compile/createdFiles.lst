@@ -9,6 +9,7 @@ com\p2pledger\controller\AuthController.class
 com\p2pledger\service\TransferService$TransferSummary.class
 com\p2pledger\model\ScheduledJobLog.class
 com\p2pledger\repository\NotificationRepository.class
+com\p2pledger\service\AdminService$UserWithWallet.class
 com\p2pledger\model\LoginAttempts$LoginAttemptsBuilder.class
 com\p2pledger\repository\TransferRepository.class
 com\p2pledger\controller\GlobalExceptionHandler.class
@@ -70,6 +71,7 @@ com\p2pledger\service\TransferService$TransferDetailDto$Builder.class
 com\p2pledger\model\AuditLog$AuditLogBuilder.class
 com\p2pledger\repository\LoginAttemptsRepository.class
 com\p2pledger\service\JwtService.class
+com\p2pledger\service\AdminService$UserDetail.class
 com\p2pledger\repository\ScheduledJobLogRepository.class
 com\p2pledger\repository\UserRepository.class
 com\p2pledger\controller\WalletController.class

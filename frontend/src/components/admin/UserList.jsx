@@ -7,6 +7,10 @@ const UserList = () => {
     const [page, setPage] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [error, setError] = useState('');
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [userDetail, setUserDetail] = useState(null);
+    const [actionLoading, setActionLoading] = useState(false);
+    const [detailLoading, setDetailLoading] = useState(false);
 
     const fetchUsers = async (page = 0) => {
         setLoading(true);
@@ -37,6 +41,66 @@ const UserList = () => {
         }
     };
 
+    const handleUserClick = async (user) => {
+        setSelectedUser(user);
+        setDetailLoading(true);
+        setError('');
+        try {
+            const response = await axios.get(`/api/admin/users/${user.id}`);
+            setUserDetail(response.data);
+        } catch (error) {
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch user details';
+            setError(errorMessage);
+            console.error('Failed to fetch user details:', errorMessage);
+        } finally {
+            setDetailLoading(false);
+        }
+    };
+
+    const handleFreezeWallet = async (userId) => {
+        if (!window.confirm('Are you sure you want to freeze this user\'s wallet?')) {
+            return;
+        }
+        
+        setActionLoading(true);
+        setError('');
+        try {
+            await axios.post(`/api/admin/users/${userId}/freeze`);
+            alert('Wallet frozen successfully');
+            fetchUsers(page); // Refresh the list
+            setSelectedUser(null);
+            setUserDetail(null);
+        } catch (error) {
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to freeze wallet';
+            setError(errorMessage);
+            alert('Error: ' + errorMessage);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleUnfreezeWallet = async (userId) => {
+        if (!window.confirm('Are you sure you want to unfreeze this user\'s wallet?')) {
+            return;
+        }
+        
+        setActionLoading(true);
+        setError('');
+        try {
+            await axios.post(`/api/admin/users/${userId}/unfreeze`);
+            alert('Wallet unfrozen successfully');
+            fetchUsers(page); // Refresh the list
+            setSelectedUser(null);
+            setUserDetail(null);
+        } catch (error) {
+            const errorMessage = error.response?.data?.message || error.message || 'Failed to unfreeze wallet';
+            setError(errorMessage);
+            alert('Error: ' + errorMessage);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
         return new Date(dateString).toLocaleDateString('en-IN', {
@@ -45,6 +109,133 @@ const UserList = () => {
             day: 'numeric'
         });
     };
+
+    const formatCurrency = (amount) => {
+        if (amount === null || amount === undefined) return '₹0.00';
+        return `₹${parseFloat(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    if (selectedUser) {
+        const displayData = userDetail || selectedUser;
+        
+        return (
+            <div className="user-detail-modal">
+                <div className="user-detail-content">
+                    <h3>User Details</h3>
+                    <button className="close-btn" onClick={() => {
+                        setSelectedUser(null);
+                        setUserDetail(null);
+                    }}>✕</button>
+                    
+                    {detailLoading && <div className="loading">Loading details...</div>}
+                    
+                    {!detailLoading && (
+                        <>
+                            <div className="user-info-grid">
+                                <div className="info-item">
+                                    <label>Name:</label>
+                                    <span>{displayData.name}</span>
+                                </div>
+                                <div className="info-item">
+                                    <label>Email:</label>
+                                    <span>{displayData.email}</span>
+                                </div>
+                                <div className="info-item">
+                                    <label>Phone:</label>
+                                    <span>{displayData.phone}</span>
+                                </div>
+                                <div className="info-item">
+                                    <label>Role:</label>
+                                    <span className={`role-badge ${displayData.role?.toLowerCase()}`}>
+                                        {displayData.role}
+                                    </span>
+                                </div>
+                                <div className="info-item">
+                                    <label>Wallet Balance:</label>
+                                    <span className="wallet-balance">{formatCurrency(displayData.walletBalance)}</span>
+                                </div>
+                                <div className="info-item">
+                                    <label>Wallet Status:</label>
+                                    <span className={`wallet-status-badge ${displayData.walletStatus?.toLowerCase()}`}>
+                                        {displayData.walletStatus || 'N/A'}
+                                    </span>
+                                </div>
+                                <div className="info-item">
+                                    <label>Masking:</label>
+                                    <span>{displayData.maskingEnabled ? '✓ Enabled' : '✗ Disabled'}</span>
+                                </div>
+                                <div className="info-item">
+                                    <label>Created:</label>
+                                    <span>{formatDate(displayData.createdAt)}</span>
+                                </div>
+                            </div>
+
+                            {/* Recent Transactions Section */}
+                            {userDetail && userDetail.recentTransfers && userDetail.recentTransfers.length > 0 && (
+                                <div className="recent-transactions-section">
+                                    <h4>Recent Transactions (Last 10)</h4>
+                                    <div className="transactions-list-modal">
+                                        {userDetail.recentTransfers.map(transfer => (
+                                            <div key={transfer.id} className={`transaction-item-modal ${transfer.status?.toLowerCase()}`}>
+                                                <div className="transaction-row">
+                                                    <span className="tx-id">ID: {transfer.id}</span>
+                                                    <span className={`tx-status ${transfer.status?.toLowerCase()}`}>
+                                                        {transfer.status}
+                                                    </span>
+                                                </div>
+                                                <div className="transaction-row">
+                                                    <span className="tx-amount">₹{transfer.amount?.toFixed(2)}</span>
+                                                    <span className="tx-direction">
+                                                        {transfer.senderId === displayData.id ? 
+                                                            `→ To User ${transfer.receiverId}` : 
+                                                            `← From User ${transfer.senderId}`}
+                                                    </span>
+                                                </div>
+                                                <div className="transaction-row">
+                                                    <span className="tx-date">{formatDate(transfer.createdAt)}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {userDetail && (!userDetail.recentTransfers || userDetail.recentTransfers.length === 0) && (
+                                <div className="recent-transactions-section">
+                                    <h4>Recent Transactions</h4>
+                                    <p className="no-transactions">No transactions found for this user</p>
+                                </div>
+                            )}
+
+                            <div className="user-actions">
+                                <h4>Wallet Actions</h4>
+                                {displayData.walletStatus === 'FROZEN' ? (
+                                    <button 
+                                        className="btn-success" 
+                                        onClick={() => handleUnfreezeWallet(displayData.id)}
+                                        disabled={actionLoading}
+                                    >
+                                        {actionLoading ? 'Processing...' : '🔓 Unfreeze Wallet'}
+                                    </button>
+                                ) : (
+                                    <button 
+                                        className="btn-danger" 
+                                        onClick={() => handleFreezeWallet(displayData.id)}
+                                        disabled={actionLoading || displayData.role === 'ADMIN'}
+                                    >
+                                        {actionLoading ? 'Processing...' : '🔒 Freeze Wallet'}
+                                    </button>
+                                )}
+                                {displayData.role === 'ADMIN' && (
+                                    <p className="note">* Cannot freeze admin wallets</p>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="user-list">
@@ -63,19 +254,27 @@ const UserList = () => {
                                     <th>Name</th>
                                     <th>Email</th>
                                     <th>Phone</th>
+                                    <th>Wallet Balance</th>
+                                    <th>Wallet Status</th>
                                     <th>Role</th>
                                     <th>Masking</th>
                                     <th>Created</th>
-                                    <th>Status</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {users.map(user => (
-                                    <tr key={user.id}>
+                                    <tr key={user.id} onClick={() => handleUserClick(user)} className="clickable-row">
                                         <td>{user.id}</td>
                                         <td>{user.name}</td>
                                         <td className="email-cell">{user.email}</td>
                                         <td>{user.phone}</td>
+                                        <td className="wallet-balance-cell">{formatCurrency(user.walletBalance)}</td>
+                                        <td>
+                                            <span className={`wallet-status-badge ${user.walletStatus?.toLowerCase()}`}>
+                                                {user.walletStatus || 'N/A'}
+                                            </span>
+                                        </td>
                                         <td>
                                             <span className={`role-badge ${user.role?.toLowerCase()}`}>
                                                 {user.role}
@@ -83,16 +282,20 @@ const UserList = () => {
                                         </td>
                                         <td>
                                             <span className={`masking-status ${user.maskingEnabled ? 'enabled' : 'disabled'}`}>
-                                                {user.maskingEnabled ? '✓ Enabled' : '✗ Disabled'}
+                                                {user.maskingEnabled ? '✓' : '✗'}
                                             </span>
                                         </td>
                                         <td>{formatDate(user.createdAt)}</td>
                                         <td>
-                                            {user.lockedUntil && new Date(user.lockedUntil) > new Date() ? (
-                                                <span className="status-locked">🔒 Locked</span>
-                                            ) : (
-                                                <span className="status-active">✓ Active</span>
-                                            )}
+                                            <button 
+                                                className="btn-view" 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleUserClick(user);
+                                                }}
+                                            >
+                                                View
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}

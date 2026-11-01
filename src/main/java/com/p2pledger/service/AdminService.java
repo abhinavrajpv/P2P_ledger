@@ -67,17 +67,45 @@ public class AdminService {
         // Get wallets count
         long walletsCount = walletRepository.count();
         
-        // Get pending settlements count
-        long pendingSettlements = transferRepository.countByStatus(TransferStatus.PENDING);
+        // Get pending settlements count and total amount
+        List<Transfer> pendingTransfers = transferRepository.findByStatus(TransferStatus.PENDING).stream().collect(Collectors.toList());
+        long pendingSettlements = pendingTransfers.size();
+        BigDecimal pendingSettlementAmount = pendingTransfers.stream()
+                .map(Transfer::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         
         // Get flagged transactions count
         long flaggedTransactions = fraudAlertRepository.countByStatus(FraudStatus.OPEN);
 
         return new DashboardData(volume30Day, usersCount, walletsCount, pendingSettlements, flaggedTransactions,
-                todayVolume, todayCount, todaySuccessCount, todayFailedCount);
+                todayVolume, todayCount, todaySuccessCount, todayFailedCount, pendingSettlementAmount);
     }
 
-    // Get all users for admin user list
+    // Get all users for admin user list with wallet balance
+    public Page<UserWithWallet> getAllUsersWithWallet(Pageable pageable) {
+        Page<User> users = userRepository.findAll(pageable);
+        List<UserWithWallet> userWithWallets = users.getContent().stream()
+                .map(user -> {
+                    Wallet wallet = walletRepository.findByUserId(user.getId()).orElse(null);
+                    return new UserWithWallet(
+                            user.getId(),
+                            user.getName(),
+                            user.getEmail(),
+                            user.getPhone(),
+                            user.getRole(),
+                            user.isMaskingEnabled(),
+                            user.getCreatedAt(),
+                            user.getLockedUntil(),
+                            wallet != null ? wallet.getBalance() : BigDecimal.ZERO,
+                            wallet != null ? wallet.getStatus() : null
+                    );
+                })
+                .collect(Collectors.toList());
+        
+        return new org.springframework.data.domain.PageImpl<>(userWithWallets, pageable, users.getTotalElements());
+    }
+    
+    // Get all users for admin user list (deprecated - use getAllUsersWithWallet)
     public Page<User> getAllUsers(Pageable pageable) {
         return userRepository.findAll(pageable);
     }
@@ -88,10 +116,21 @@ public class AdminService {
         // Build dynamic query based on provided filters
         Page<Transfer> result;
         
+        // Convert status string to enum if provided
+        TransferStatus statusEnum = null;
+        if (status != null && !status.isEmpty()) {
+            try {
+                statusEnum = TransferStatus.valueOf(status);
+            } catch (IllegalArgumentException e) {
+                // Invalid status, ignore and return empty result
+                return Page.empty(pageable);
+            }
+        }
+        
         if (senderId != null) {
             // Filter by senderId with optional status and date range
-            if (status != null) {
-                result = transferRepository.findBySenderIdAndStatus(senderId, status, pageable);
+            if (statusEnum != null) {
+                result = transferRepository.findBySenderIdAndStatus(senderId, statusEnum, pageable);
             } else if (startDate != null && endDate != null) {
                 result = transferRepository.findBySenderIdAndCreatedAtBetween(senderId, startDate, endDate, pageable);
             } else if (startDate != null) {
@@ -103,8 +142,8 @@ public class AdminService {
             }
         } else if (receiverId != null) {
             // Filter by receiverId with optional status and date range
-            if (status != null) {
-                result = transferRepository.findByReceiverIdAndStatus(receiverId, status, pageable);
+            if (statusEnum != null) {
+                result = transferRepository.findByReceiverIdAndStatus(receiverId, statusEnum, pageable);
             } else if (startDate != null && endDate != null) {
                 result = transferRepository.findByReceiverIdAndCreatedAtBetween(receiverId, startDate, endDate, pageable);
             } else if (startDate != null) {
@@ -114,9 +153,9 @@ public class AdminService {
             } else {
                 result = transferRepository.findByReceiverId(receiverId, pageable);
             }
-        } else if (status != null) {
+        } else if (statusEnum != null) {
             // Filter by status only
-            result = transferRepository.findByStatus(status, pageable);
+            result = transferRepository.findByStatus(statusEnum, pageable);
         } else if (startDate != null && endDate != null) {
             // Filter by date range only
             result = transferRepository.findByCreatedAtBetween(startDate, endDate, pageable);
@@ -378,6 +417,85 @@ public class AdminService {
         
         return new ReconciliationStatus(totalDebits, totalCredits, debitCount, creditCount, balanced, mismatch);
     }
+    
+    // Get user detail with wallet and recent transactions
+    public UserDetail getUserDetail(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        
+        Wallet wallet = walletRepository.findByUserId(userId).orElse(null);
+        
+        // Get recent 10 transfers (sent and received)
+        List<Transfer> recentTransfers = transferRepository.findAll().stream()
+                .filter(t -> t.getSenderId().equals(userId) || t.getReceiverId().equals(userId))
+                .sorted((t1, t2) -> t2.getCreatedAt().compareTo(t1.getCreatedAt()))
+                .limit(10)
+                .collect(Collectors.toList());
+        
+        return new UserDetail(
+                user.getId(),
+                user.getName(),
+                user.getEmail(),
+                user.getPhone(),
+                user.getRole(),
+                user.isMaskingEnabled(),
+                user.getCreatedAt(),
+                user.getLockedUntil(),
+                wallet != null ? wallet.getBalance() : BigDecimal.ZERO,
+                wallet != null ? wallet.getStatus() : null,
+                recentTransfers
+        );
+    }
+    
+    // Freeze user wallet (set to FROZEN status)
+    @Transactional
+    public void freezeUserWallet(Long userId) {
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Wallet not found for user"));
+        
+        if (wallet.getStatus() == WalletStatus.FROZEN) {
+            throw new IllegalArgumentException("Wallet is already frozen");
+        }
+        
+        wallet.setStatus(WalletStatus.FROZEN);
+        walletRepository.save(wallet);
+        
+        // Create audit log
+        AuditLog auditLog = AuditLog.builder()
+                .actorUserId(userId)
+                .action("WALLET_FROZEN")
+                .entityType("WALLET")
+                .entityId(userId.toString())
+                .details("Admin froze wallet for user ID: " + userId)
+                .createdAt(LocalDateTime.now())
+                .build();
+        auditLogRepository.save(auditLog);
+    }
+    
+    // Unfreeze user wallet (set to ACTIVE status)
+    @Transactional
+    public void unfreezeUserWallet(Long userId) {
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Wallet not found for user"));
+        
+        if (wallet.getStatus() != WalletStatus.FROZEN) {
+            throw new IllegalArgumentException("Wallet is not frozen");
+        }
+        
+        wallet.setStatus(WalletStatus.ACTIVE);
+        walletRepository.save(wallet);
+        
+        // Create audit log
+        AuditLog auditLog = AuditLog.builder()
+                .actorUserId(userId)
+                .action("WALLET_UNFROZEN")
+                .entityType("WALLET")
+                .entityId(userId.toString())
+                .details("Admin unfroze wallet for user ID: " + userId)
+                .createdAt(LocalDateTime.now())
+                .build();
+        auditLogRepository.save(auditLog);
+    }
 
     // Response DTOs
     public static class DashboardData {
@@ -390,10 +508,12 @@ public class AdminService {
         private final long todayCount;
         private final long todaySuccessCount;
         private final long todayFailedCount;
+        private final BigDecimal pendingSettlementAmount;
 
         public DashboardData(BigDecimal volume30Day, long usersCount, long walletsCount, 
                            long pendingSettlements, long flaggedTransactions,
-                           BigDecimal todayVolume, long todayCount, long todaySuccessCount, long todayFailedCount) {
+                           BigDecimal todayVolume, long todayCount, long todaySuccessCount, long todayFailedCount,
+                           BigDecimal pendingSettlementAmount) {
             this.volume30Day = volume30Day;
             this.usersCount = usersCount;
             this.walletsCount = walletsCount;
@@ -403,6 +523,7 @@ public class AdminService {
             this.todayCount = todayCount;
             this.todaySuccessCount = todaySuccessCount;
             this.todayFailedCount = todayFailedCount;
+            this.pendingSettlementAmount = pendingSettlementAmount;
         }
 
         public BigDecimal getVolume30Day() { return volume30Day; }
@@ -414,6 +535,7 @@ public class AdminService {
         public long getTodayCount() { return todayCount; }
         public long getTodaySuccessCount() { return todaySuccessCount; }
         public long getTodayFailedCount() { return todayFailedCount; }
+        public BigDecimal getPendingSettlementAmount() { return pendingSettlementAmount; }
     }
     
     public static class SettlementSummary {
@@ -459,5 +581,86 @@ public class AdminService {
         public long getCreditCount() { return creditCount; }
         public boolean isBalanced() { return balanced; }
         public BigDecimal getMismatch() { return mismatch; }
+    }
+    
+    public static class UserWithWallet {
+        private final Long id;
+        private final String name;
+        private final String email;
+        private final String phone;
+        private final Role role;
+        private final boolean maskingEnabled;
+        private final LocalDateTime createdAt;
+        private final LocalDateTime lockedUntil;
+        private final BigDecimal walletBalance;
+        private final WalletStatus walletStatus;
+        
+        public UserWithWallet(Long id, String name, String email, String phone, Role role, 
+                             boolean maskingEnabled, LocalDateTime createdAt, LocalDateTime lockedUntil,
+                             BigDecimal walletBalance, WalletStatus walletStatus) {
+            this.id = id;
+            this.name = name;
+            this.email = email;
+            this.phone = phone;
+            this.role = role;
+            this.maskingEnabled = maskingEnabled;
+            this.createdAt = createdAt;
+            this.lockedUntil = lockedUntil;
+            this.walletBalance = walletBalance;
+            this.walletStatus = walletStatus;
+        }
+        
+        public Long getId() { return id; }
+        public String getName() { return name; }
+        public String getEmail() { return email; }
+        public String getPhone() { return phone; }
+        public Role getRole() { return role; }
+        public boolean isMaskingEnabled() { return maskingEnabled; }
+        public LocalDateTime getCreatedAt() { return createdAt; }
+        public LocalDateTime getLockedUntil() { return lockedUntil; }
+        public BigDecimal getWalletBalance() { return walletBalance; }
+        public WalletStatus getWalletStatus() { return walletStatus; }
+    }
+    
+    public static class UserDetail {
+        private final Long id;
+        private final String name;
+        private final String email;
+        private final String phone;
+        private final Role role;
+        private final boolean maskingEnabled;
+        private final LocalDateTime createdAt;
+        private final LocalDateTime lockedUntil;
+        private final BigDecimal walletBalance;
+        private final WalletStatus walletStatus;
+        private final List<Transfer> recentTransfers;
+        
+        public UserDetail(Long id, String name, String email, String phone, Role role,
+                         boolean maskingEnabled, LocalDateTime createdAt, LocalDateTime lockedUntil,
+                         BigDecimal walletBalance, WalletStatus walletStatus, List<Transfer> recentTransfers) {
+            this.id = id;
+            this.name = name;
+            this.email = email;
+            this.phone = phone;
+            this.role = role;
+            this.maskingEnabled = maskingEnabled;
+            this.createdAt = createdAt;
+            this.lockedUntil = lockedUntil;
+            this.walletBalance = walletBalance;
+            this.walletStatus = walletStatus;
+            this.recentTransfers = recentTransfers;
+        }
+        
+        public Long getId() { return id; }
+        public String getName() { return name; }
+        public String getEmail() { return email; }
+        public String getPhone() { return phone; }
+        public Role getRole() { return role; }
+        public boolean isMaskingEnabled() { return maskingEnabled; }
+        public LocalDateTime getCreatedAt() { return createdAt; }
+        public LocalDateTime getLockedUntil() { return lockedUntil; }
+        public BigDecimal getWalletBalance() { return walletBalance; }
+        public WalletStatus getWalletStatus() { return walletStatus; }
+        public List<Transfer> getRecentTransfers() { return recentTransfers; }
     }
 }

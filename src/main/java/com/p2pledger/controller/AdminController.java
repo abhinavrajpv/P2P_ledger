@@ -35,8 +35,29 @@ public class AdminController {
     }
     
     @GetMapping("/users")
-    public ResponseEntity<Page<User>> getAllUsers(Pageable pageable, Authentication authentication) {
-        return ResponseEntity.ok(adminService.getAllUsers(pageable));
+    public ResponseEntity<Page<AdminService.UserWithWallet>> getAllUsers(Pageable pageable, Authentication authentication) {
+        return ResponseEntity.ok(adminService.getAllUsersWithWallet(pageable));
+    }
+    
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<AdminService.UserDetail> getUserDetail(@PathVariable Long userId, Authentication authentication) {
+        return ResponseEntity.ok(adminService.getUserDetail(userId));
+    }
+    
+    @PostMapping("/users/{userId}/freeze")
+    public ResponseEntity<Map<String, String>> freezeUserWallet(@PathVariable Long userId, Authentication authentication) {
+        adminService.freezeUserWallet(userId);
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "User wallet frozen successfully");
+        return ResponseEntity.ok(response);
+    }
+    
+    @PostMapping("/users/{userId}/unfreeze")
+    public ResponseEntity<Map<String, String>> unfreezeUserWallet(@PathVariable Long userId, Authentication authentication) {
+        adminService.unfreezeUserWallet(userId);
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "User wallet unfrozen successfully");
+        return ResponseEntity.ok(response);
     }
     
     @GetMapping("/settlements/summary")

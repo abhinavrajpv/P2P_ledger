@@ -848,4 +848,9 @@ public class TransferService {
         public BigDecimal getBalanceAfter() { return balanceAfter; }
         public LocalDateTime getCreatedAt() { return createdAt; }
     }
+    
+    // Get ledger entries for a transfer
+    public List<LedgerEntry> getLedgerEntriesByTransferId(Long transferId) {
+        return ledgerEntryRepository.findByTransferId(transferId);
+    }
 }

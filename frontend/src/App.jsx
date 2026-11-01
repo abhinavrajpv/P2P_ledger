@@ -28,13 +28,7 @@ import UnreadCountBadge from './components/notification/UnreadCountBadge'
 import NotificationList from './components/notification/NotificationList'
 
 // Admin
-import DashboardStats from './components/admin/DashboardStats'
-import UserList from './components/admin/UserList'
-import TransactionMonitor from './components/admin/TransactionMonitor'
-import SettlementMonitor from './components/admin/SettlementMonitor'
-import FraudReview from './components/admin/FraudReview'
-import JobMonitor from './components/admin/JobMonitor'
-import ReconciliationReport from './components/admin/ReconciliationReport'
+import AdminDashboard from './components/admin/AdminDashboard'
 
 function NavBar() {
     const navigate = useNavigate()
@@ -160,15 +154,7 @@ function App() {
                         {/* Admin */}
                         <Route path="/admin" element={
                             <PrivateRoute requireAdmin>
-                                <div className="dashboard">
-                                    <DashboardStats />
-                                    <UserList />
-                                    <TransactionMonitor />
-                                    <SettlementMonitor />
-                                    <FraudReview />
-                                    <JobMonitor />
-                                    <ReconciliationReport />
-                                </div>
+                                <AdminDashboard />
                             </PrivateRoute>
                         } />
 

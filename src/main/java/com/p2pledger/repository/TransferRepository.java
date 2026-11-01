@@ -35,6 +35,8 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
             Long senderId, Long receiverId, java.math.BigDecimal amount, LocalDateTime after);
 
     Page<Transfer> findBySenderIdAndStatus(Long senderId, String status, Pageable pageable);
+    
+    Page<Transfer> findBySenderIdAndStatus(Long senderId, com.p2pledger.model.TransferStatus status, Pageable pageable);
 
     Page<Transfer> findBySenderIdAndCreatedAtBetween(Long senderId, LocalDateTime startDate, LocalDateTime endDate, Pageable pageable);
 
@@ -43,6 +45,8 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
     Page<Transfer> findBySenderIdAndCreatedAtBefore(Long senderId, LocalDateTime endDate, Pageable pageable);
 
     Page<Transfer> findByReceiverIdAndStatus(Long receiverId, String status, Pageable pageable);
+    
+    Page<Transfer> findByReceiverIdAndStatus(Long receiverId, com.p2pledger.model.TransferStatus status, Pageable pageable);
 
     Page<Transfer> findByReceiverIdAndCreatedAtBetween(Long receiverId, LocalDateTime startDate, LocalDateTime endDate, Pageable pageable);
 
