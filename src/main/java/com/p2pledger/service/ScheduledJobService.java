@@ -50,14 +50,21 @@ public class ScheduledJobService {
 
         try {
             // Find all PENDING transfers whose settlement date has arrived
+            // Note: Include ALL pending transfers, even those awaiting admin review
+            // If admin doesn't take action by settlement date, transaction settles automatically
             List<Transfer> eligibleTransfers = transferRepository.findAll().stream()
                     .filter(t -> t.getStatus() == TransferStatus.PENDING)
                     .filter(t -> t.getSettlementDate().isBefore(LocalDateTime.now()) || t.getSettlementDate().equals(LocalDateTime.now()))
-                    .filter(t -> t.getAdminReviewStatus() != AdminReviewStatus.PENDING)
                     .toList();
 
             for (Transfer transfer : eligibleTransfers) {
                 try {
+                    // Auto-approve if admin review is still pending at settlement time
+                    if (transfer.getAdminReviewStatus() == AdminReviewStatus.PENDING) {
+                        transfer.setAdminReviewStatus(AdminReviewStatus.APPROVED);
+                        transferRepository.save(transfer);
+                    }
+                    
                     settleTransferInternal(transfer);
                     processedCount++;
                     totalAmount = totalAmount.add(transfer.getAmount());
