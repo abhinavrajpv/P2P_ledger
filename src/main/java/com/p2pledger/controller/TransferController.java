@@ -6,10 +6,12 @@ import com.p2pledger.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -48,12 +50,17 @@ public class TransferController {
             Pageable pageable,
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) LocalDateTime startDate,
-            @RequestParam(required = false) LocalDateTime endDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
+        
+        // Convert LocalDate to LocalDateTime (start of day and end of day)
+        LocalDateTime startDateTime = startDate != null ? startDate.atStartOfDay() : null;
+        LocalDateTime endDateTime = endDate != null ? endDate.atTime(23, 59, 59) : null;
+        
         Page<TransferService.TransferHistoryDto> result = transferService.getTransactionHistory(
-                userId, pageable.getPageNumber(), pageable.getPageSize(), type, status, startDate, endDate);
+                userId, pageable.getPageNumber(), pageable.getPageSize(), type, status, startDateTime, endDateTime);
         return ResponseEntity.ok(result);
     }
 
