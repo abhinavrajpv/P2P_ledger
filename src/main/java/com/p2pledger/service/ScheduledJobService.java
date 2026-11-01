@@ -192,7 +192,7 @@ public class ScheduledJobService {
     }
 
     // Task 11.4 - Daily summary job
-    @Scheduled(cron = "0 0 23 * * ?") // Run daily at 11 PM
+    @Scheduled(cron = "0 0 23 * * ?") // Run daily at 11 PM (23:00)
     @Transactional
     public void generateDailySummary() {
         LocalDate summaryDate = LocalDate.now();
@@ -233,6 +233,8 @@ public class ScheduledJobService {
                     .totalAmount(totalAmount)
                     .successfulTransfers(successfulTransfers)
                     .failedTransfers(failedTransfers)
+                    .createdAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now())
                     .build();
             dailySummaryRepository.save(summary);
 
