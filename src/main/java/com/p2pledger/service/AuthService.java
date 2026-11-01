@@ -1,8 +1,10 @@
 package com.p2pledger.service;
 
+import com.p2pledger.model.LoginAttempts;
 import com.p2pledger.model.Role;
 import com.p2pledger.model.User;
 import com.p2pledger.model.Wallet;
+import com.p2pledger.repository.LoginAttemptsRepository;
 import com.p2pledger.repository.UserRepository;
 import com.p2pledger.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final WalletRepository walletRepository;
+    private final LoginAttemptsRepository loginAttemptsRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
@@ -83,10 +86,19 @@ public class AuthService {
         // Find user by email or phone
         User user = userRepository.findByEmail(identifier)
                 .orElseGet(() -> userRepository.findByPhone(identifier)
-                        .orElseThrow(() -> new IllegalArgumentException("Invalid credentials")));
+                        .orElse(null));
+
+        // Check if user exists
+        if (user == null) {
+            // Log failed login attempt (user not found)
+            logLoginAttempt(null, identifier, false, "User not found");
+            throw new IllegalArgumentException("Invalid credentials");
+        }
 
         // Check if account is locked
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now())) {
+            // Log failed login attempt (account locked)
+            logLoginAttempt(user.getId(), identifier, false, "Account locked");
             throw new IllegalArgumentException("Account is locked until " + user.getLockedUntil());
         }
 
@@ -102,6 +114,9 @@ public class AuthService {
             }
 
             userRepository.save(user);
+            
+            // Log failed login attempt (invalid password)
+            logLoginAttempt(user.getId(), identifier, false, "Invalid password");
             throw new IllegalArgumentException("Invalid credentials");
         }
 
@@ -110,7 +125,22 @@ public class AuthService {
         user.setLockedUntil(null);
         user.setUpdatedAt(LocalDateTime.now());
 
+        // Log successful login attempt
+        logLoginAttempt(user.getId(), identifier, true, "Login successful");
+
         return userRepository.save(user);
+    }
+
+    private void logLoginAttempt(Long userId, String identifier, boolean successful, String source) {
+        LoginAttempts loginAttempt = LoginAttempts.builder()
+                .userId(userId)
+                .identifier(identifier)
+                .attemptedAt(LocalDateTime.now())
+                .successful(successful)
+                .source(source)
+                .build();
+        
+        loginAttemptsRepository.save(loginAttempt);
     }
 
     private void validateEmail(String email) {

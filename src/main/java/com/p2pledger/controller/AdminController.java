@@ -131,6 +131,20 @@ public class AdminController {
             Authentication authentication) {
         return ResponseEntity.ok(adminService.getReconciliationReport(startDate, endDate));
     }
+    
+    @GetMapping("/login-attempts")
+    public ResponseEntity<List<com.p2pledger.model.LoginAttempts>> getLoginAttempts(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String identifier,
+            @RequestParam(required = false) Boolean successful,
+            Authentication authentication) {
+        return ResponseEntity.ok(adminService.getLoginAttempts(userId, identifier, successful));
+    }
+    
+    @GetMapping("/login-attempts/failed")
+    public ResponseEntity<List<com.p2pledger.model.LoginAttempts>> getFailedLoginAttempts(Authentication authentication) {
+        return ResponseEntity.ok(adminService.getFailedLoginAttempts());
+    }
 
     public static class ProcessSettlementRequest {
         private Long transferId;

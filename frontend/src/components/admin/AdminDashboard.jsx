@@ -6,6 +6,7 @@ import SettlementMonitor from './SettlementMonitor';
 import FraudReview from './FraudReview';
 import JobMonitor from './JobMonitor';
 import ReconciliationReport from './ReconciliationReport';
+import LoginAttemptsMonitor from './LoginAttemptsMonitor';
 
 const AdminDashboard = () => {
     const [activeSection, setActiveSection] = useState('dashboard');
@@ -16,6 +17,7 @@ const AdminDashboard = () => {
         { id: 'transactions', label: 'Transaction Monitoring', icon: '💸' },
         { id: 'settlements', label: 'Settlement Monitor', icon: '⏰' },
         { id: 'fraud', label: 'Fraud Review', icon: '🚨' },
+        { id: 'login-attempts', label: 'Login Attempts', icon: '🔐' },
         { id: 'jobs', label: 'Scheduled Job Monitor', icon: '⚙️' },
         { id: 'reconciliation', label: 'Reconciliation Report', icon: '📑' }
     ];
@@ -32,6 +34,8 @@ const AdminDashboard = () => {
                 return <SettlementMonitor />;
             case 'fraud':
                 return <FraudReview />;
+            case 'login-attempts':
+                return <LoginAttemptsMonitor />;
             case 'jobs':
                 return <JobMonitor />;
             case 'reconciliation':

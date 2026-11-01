@@ -29,6 +29,7 @@ public class AdminService {
     private final ScheduledJobLogRepository scheduledJobLogRepository;
     private final DailySummaryRepository dailySummaryRepository;
     private final SettlementBatchRepository settlementBatchRepository;
+    private final LoginAttemptsRepository loginAttemptsRepository;
 
     // Task 10.1 - Dashboard data with today's stats and 30-day trend
     public DashboardData getDashboardData() {
@@ -618,6 +619,23 @@ public class AdminService {
                 .createdAt(LocalDateTime.now())
                 .build();
         auditLogRepository.save(auditLog);
+    }
+    
+    // Get login attempts with optional filters
+    public List<LoginAttempts> getLoginAttempts(Long userId, String identifier, Boolean successful) {
+        List<LoginAttempts> allAttempts = loginAttemptsRepository.findAll();
+        
+        return allAttempts.stream()
+                .filter(attempt -> userId == null || attempt.getUserId().equals(userId))
+                .filter(attempt -> identifier == null || attempt.getIdentifier().equalsIgnoreCase(identifier))
+                .filter(attempt -> successful == null || attempt.isSuccessful() == successful)
+                .sorted((a1, a2) -> a2.getAttemptedAt().compareTo(a1.getAttemptedAt()))
+                .collect(Collectors.toList());
+    }
+    
+    // Get all failed login attempts
+    public List<LoginAttempts> getFailedLoginAttempts() {
+        return loginAttemptsRepository.findBySuccessfulFalseOrderByAttemptedAtDesc();
     }
 
     // Response DTOs
