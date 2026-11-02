@@ -469,69 +469,6 @@ public class AdminService {
         return dailySummaryRepository.findBySummaryDateBetween(startDate, endDate);
     }
     
-    public ReconciliationStatus getTodayReconciliation() {
-        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
-        LocalDateTime todayEnd = LocalDate.now().atTime(23, 59, 59);
-        
-        // Only get ledger entries for SUCCESSFUL transfers (exclude deposits and refunds)
-        // Get all successful transfers from today
-        List<Transfer> todaySuccessfulTransfers = transferRepository.findByCreatedAtBetween(todayStart, todayEnd, Pageable.unpaged())
-                .getContent()
-                .stream()
-                .filter(t -> t.getStatus() == TransferStatus.SUCCESS)
-                .collect(Collectors.toList());
-        
-        // Get the transfer IDs
-        List<Long> successfulTransferIds = todaySuccessfulTransfers.stream()
-                .map(Transfer::getId)
-                .collect(Collectors.toList());
-        
-        // Get all ledger entries for today
-        List<LedgerEntry> todayEntries = ledgerEntryRepository.findByCreatedAtBetween(todayStart, todayEnd);
-        
-        // Filter to only include entries for successful transfers
-        List<LedgerEntry> transferEntries = todayEntries.stream()
-                .filter(e -> e.getTransferId() != null && successfulTransferIds.contains(e.getTransferId()))
-                .collect(Collectors.toList());
-        
-        BigDecimal totalDebits = transferEntries.stream()
-                .filter(e -> e.getType() == LedgerType.DEBIT)
-                .map(LedgerEntry::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        BigDecimal totalCredits = transferEntries.stream()
-                .filter(e -> e.getType() == LedgerType.CREDIT)
-                .map(LedgerEntry::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        long debitCount = transferEntries.stream()
-                .filter(e -> e.getType() == LedgerType.DEBIT)
-                .count();
-        
-        long creditCount = transferEntries.stream()
-                .filter(e -> e.getType() == LedgerType.CREDIT)
-                .count();
-        
-        // Get pending settlement amount for today's transfers
-        List<Transfer> todayPendingTransfers = transferRepository.findByCreatedAtBetween(todayStart, todayEnd, Pageable.unpaged())
-                .getContent()
-                .stream()
-                .filter(t -> t.getStatus() == TransferStatus.PENDING)
-                .collect(Collectors.toList());
-        
-        BigDecimal pendingSettlement = todayPendingTransfers.stream()
-                .map(Transfer::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        
-        long pendingCount = todayPendingTransfers.size();
-        
-        boolean balanced = totalDebits.compareTo(totalCredits) == 0;
-        BigDecimal mismatch = totalDebits.subtract(totalCredits);
-        
-        return new ReconciliationStatus(totalDebits, totalCredits, debitCount, creditCount, 
-                balanced, mismatch, pendingSettlement, pendingCount);
-    }
-
     // Get daily transaction volume chart data for last 30 days
     public List<DailyVolumeData> getDailyVolumeChart() {
         LocalDate endDate = LocalDate.now();
@@ -552,7 +489,7 @@ public class AdminService {
             
             // Check if we have summary data for this date
             if (summaryMap.containsKey(date)) {
-                volume = summaryMap.get(date).getTotalAmount();
+                volume = summaryMap.get(date).getTotalAmountSettled();
             } else {
                 // Calculate from transfer table for dates without summary
                 LocalDateTime dayStart = date.atStartOfDay();

@@ -3592,3 +3592,108 @@ button:disabled {
   font-size: 0.85rem;
   font-style: italic;
 }
+
+/* Daily Summary Table */
+.daily-summary-section {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.daily-summary-section h4 {
+  margin-bottom: 1rem;
+  color: #1976d2;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.summary-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.summary-table td:first-child {
+  width: 40%;
+  color: #555;
+}
+
+.summary-table td:nth-child(2) {
+  width: 30%;
+  text-align: right;
+  font-weight: 500;
+}
+
+.summary-table td:nth-child(3) {
+  width: 30%;
+  text-align: right;
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.summary-table tr:last-child td {
+  border-bottom: none;
+}
+
+.summary-table .success-row {
+  background-color: #e8f5e9;
+}
+
+.summary-table .success-row td {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.summary-table .error-row {
+  background-color: #ffebee;
+}
+
+.summary-table .error-row td {
+  color: #c62828;
+  font-weight: 600;
+}
+
+/* Reconciliation improvements */
+.reconciliation-status {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.reconciliation-status h4 {
+  margin-bottom: 1rem;
+  color: #1976d2;
+}
+
+.reconciliation-report h3 {
+  margin-bottom: 0.5rem;
+  color: #333;
+}
+
+.reconciliation-report .info-text {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+  font-style: italic;
+}
+
+.reconciliation-report .no-data {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  color: #666;
+}
+
+.reconciliation-report .last-updated {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: #666;
+  text-align: right;
+}

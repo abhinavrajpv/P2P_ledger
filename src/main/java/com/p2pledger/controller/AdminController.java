@@ -71,11 +71,6 @@ public class AdminController {
     public ResponseEntity<AdminService.SettlementSummary> getSettlementSummary(Authentication authentication) {
         return ResponseEntity.ok(adminService.getSettlementSummary());
     }
-    
-    @GetMapping("/reconciliation/today")
-    public ResponseEntity<AdminService.ReconciliationStatus> getTodayReconciliation(Authentication authentication) {
-        return ResponseEntity.ok(adminService.getTodayReconciliation());
-    }
 
     @GetMapping("/transactions")
     public ResponseEntity<Page<Transfer>> getTransactions(

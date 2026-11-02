@@ -12,7 +12,7 @@ const JobMonitor = () => {
         { value: 'settle_eligible_transfers', label: '💰 Settle Eligible Transfers' },
         { value: 'reset_daily_limits', label: '🔄 Reset Daily Limits' },
         { value: 'unlock_locked_accounts', label: '🔓 Unlock Locked Accounts' },
-        { value: 'generate_daily_summary', label: '📊 Generate Daily Summary' }
+        { value: 'daily_summary_reconciliation', label: '📊 Daily Summary & Reconciliation' }
     ];
 
     const fetchJobs = async () => {
@@ -184,6 +184,50 @@ const JobMonitor = () => {
                                                 <div className="detail-row">
                                                     <span className="detail-label">Total Transfers:</span>
                                                     <span className="detail-value">{details.totalTransfers}</span>
+                                                </div>
+                                            )}
+                                            {details.initiated !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Transfers Initiated:</span>
+                                                    <span className="detail-value">{details.initiated}</span>
+                                                </div>
+                                            )}
+                                            {details.settled !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Transfers Settled:</span>
+                                                    <span className="detail-value">{details.settled}</span>
+                                                </div>
+                                            )}
+                                            {details.fraudAlerts !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Fraud Alerts:</span>
+                                                    <span className="detail-value">{details.fraudAlerts}</span>
+                                                </div>
+                                            )}
+                                            {details.newUsers !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">New Users:</span>
+                                                    <span className="detail-value">{details.newUsers}</span>
+                                                </div>
+                                            )}
+                                            {details.pendingAmount !== undefined && (
+                                                <div className="detail-row">
+                                                    <span className="detail-label">Pending Amount:</span>
+                                                    <span className="detail-value">₹{details.pendingAmount}</span>
+                                                </div>
+                                            )}
+                                            {details.reconciliationBalanced !== undefined && (
+                                                <div className={`detail-row ${details.reconciliationBalanced === 'true' || details.reconciliationBalanced === true ? 'success' : 'error'}`}>
+                                                    <span className="detail-label">Reconciliation:</span>
+                                                    <span className="detail-value">
+                                                        {details.reconciliationBalanced === 'true' || details.reconciliationBalanced === true ? '✓ BALANCED' : '⚠️ MISMATCH'}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {details.mismatch !== undefined && details.mismatch !== '0' && details.mismatch !== '0.00' && (
+                                                <div className="detail-row error">
+                                                    <span className="detail-label">Mismatch Amount:</span>
+                                                    <span className="detail-value">₹{details.mismatch}</span>
                                                 </div>
                                             )}
                                             {details.successfulTransfers !== undefined && (

@@ -187,58 +187,155 @@ public class ScheduledJobService {
         scheduledJobLogRepository.save(log);
     }
 
-    // Task 11.4 - Daily summary job
-    @Scheduled(cron = "0 0 23 * * ?") // Run daily at 11 PM (23:00)
+    // Task 11.4 - Daily summary and reconciliation job (combined)
+    @Scheduled(cron = "0 */5 * * * ?") // Run every 5 minutes
     @Transactional
-    public void generateDailySummary() {
+    public void generateDailySummaryAndReconciliation() {
         LocalDate summaryDate = LocalDate.now();
 
-        // Check if summary already exists for today
-        if (dailySummaryRepository.findBySummaryDate(summaryDate).isPresent()) {
-            return; // Skip if already generated today
-        }
+        // Check if summary already exists for today - if so, update it instead of creating new
+        java.util.Optional<DailySummary> existingSummary = dailySummaryRepository.findBySummaryDate(summaryDate);
+        boolean isUpdate = existingSummary.isPresent();
 
-        String batchId = "DAILY_SUMMARY-" + summaryDate.toString();
+        String batchId = "DAILY_SUMMARY_RECON-" + summaryDate.toString();
 
         // Calculate summary statistics
         LocalDateTime startOfDay = summaryDate.atStartOfDay();
         LocalDateTime endOfDay = summaryDate.atTime(23, 59, 59);
 
-        List<Transfer> transfers = transferRepository.findAll().stream()
-                .filter(t -> t.getCreatedAt().isAfter(startOfDay))
-                .filter(t -> t.getCreatedAt().isBefore(endOfDay))
-                .toList();
+        // Get all transfers initiated today
+        List<Transfer> initiatedTransfers = transferRepository.findByCreatedAtBetween(startOfDay, endOfDay, org.springframework.data.domain.Pageable.unpaged())
+                .getContent();
 
-        long totalTransfers = transfers.size();
-        long successfulTransfers = transfers.stream()
+        // 1. Total number of transfers initiated and their total amount
+        long totalTransfersInitiated = initiatedTransfers.size();
+        BigDecimal totalAmountInitiated = initiatedTransfers.stream()
+                .map(Transfer::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // 2. Total number of transfers settled and their total amount
+        long totalTransfersSettled = initiatedTransfers.stream()
                 .filter(t -> t.getStatus() == TransferStatus.SUCCESS)
                 .count();
-        long failedTransfers = transfers.stream()
-                .filter(t -> t.getStatus() == TransferStatus.FAILED || t.getStatus() == TransferStatus.DECLINED)
-                .count();
-
-        BigDecimal totalAmount = transfers.stream()
+        BigDecimal totalAmountSettled = initiatedTransfers.stream()
                 .filter(t -> t.getStatus() == TransferStatus.SUCCESS)
                 .map(Transfer::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        // 3. Number of fraud alerts raised today
+        long fraudAlertsRaised = fraudAlertRepository.findAll().stream()
+                .filter(fa -> fa.getCreatedAt().isAfter(startOfDay) && fa.getCreatedAt().isBefore(endOfDay))
+                .count();
+
+        // 4. Number of new user registrations today
+        long newUserRegistrations = userRepository.findAll().stream()
+                .filter(u -> u.getCreatedAt().isAfter(startOfDay) && u.getCreatedAt().isBefore(endOfDay))
+                .count();
+
+        // 5. Total pending settlement amount across all users (today's pending transfers)
+        List<Transfer> pendingTransfers = initiatedTransfers.stream()
+                .filter(t -> t.getStatus() == TransferStatus.PENDING)
+                .toList();
+        long pendingSettlementCount = pendingTransfers.size();
+        BigDecimal pendingSettlementAmount = pendingTransfers.stream()
+                .map(Transfer::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // RECONCILIATION: Get ledger entries for successful transfers only
+        List<Transfer> successfulTransfersForRecon = initiatedTransfers.stream()
+                .filter(t -> t.getStatus() == TransferStatus.SUCCESS)
+                .toList();
+        
+        List<Long> successfulTransferIds = successfulTransfersForRecon.stream()
+                .map(Transfer::getId)
+                .toList();
+        
+        // Get all ledger entries for today
+        List<LedgerEntry> todayEntries = ledgerEntryRepository.findByCreatedAtBetween(startOfDay, endOfDay);
+        
+        // Filter to only include entries for successful transfers (excludes deposits and refunds)
+        List<LedgerEntry> transferEntries = todayEntries.stream()
+                .filter(e -> e.getTransferId() != null && successfulTransferIds.contains(e.getTransferId()))
+                .toList();
+        
+        BigDecimal totalDebits = transferEntries.stream()
+                .filter(e -> e.getType() == LedgerType.DEBIT)
+                .map(LedgerEntry::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        BigDecimal totalCredits = transferEntries.stream()
+                .filter(e -> e.getType() == LedgerType.CREDIT)
+                .map(LedgerEntry::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        
+        long debitCount = transferEntries.stream()
+                .filter(e -> e.getType() == LedgerType.DEBIT)
+                .count();
+        
+        long creditCount = transferEntries.stream()
+                .filter(e -> e.getType() == LedgerType.CREDIT)
+                .count();
+        
+        boolean reconciliationBalanced = totalDebits.compareTo(totalCredits) == 0;
+        BigDecimal reconciliationMismatch = totalDebits.subtract(totalCredits);
+
         try {
-            DailySummary summary = DailySummary.builder()
-                    .summaryDate(summaryDate)
-                    .totalTransfers(totalTransfers)
-                    .totalAmount(totalAmount)
-                    .successfulTransfers(successfulTransfers)
-                    .failedTransfers(failedTransfers)
-                    .createdAt(LocalDateTime.now())
-                    .updatedAt(LocalDateTime.now())
-                    .build();
+            DailySummary summary;
+            if (isUpdate) {
+                // Update existing summary
+                summary = existingSummary.get();
+                summary.setTotalTransfersInitiated(totalTransfersInitiated);
+                summary.setTotalAmountInitiated(totalAmountInitiated);
+                summary.setTotalTransfersSettled(totalTransfersSettled);
+                summary.setTotalAmountSettled(totalAmountSettled);
+                summary.setFraudAlertsRaised(fraudAlertsRaised);
+                summary.setNewUserRegistrations(newUserRegistrations);
+                summary.setPendingSettlementCount(pendingSettlementCount);
+                summary.setPendingSettlementAmount(pendingSettlementAmount);
+                summary.setTotalDebits(totalDebits);
+                summary.setTotalCredits(totalCredits);
+                summary.setDebitCount(debitCount);
+                summary.setCreditCount(creditCount);
+                summary.setReconciliationBalanced(reconciliationBalanced);
+                summary.setReconciliationMismatch(reconciliationMismatch);
+                summary.setUpdatedAt(LocalDateTime.now());
+            } else {
+                // Create new summary
+                summary = DailySummary.builder()
+                        .summaryDate(summaryDate)
+                        // New fields
+                        .totalTransfersInitiated(totalTransfersInitiated)
+                        .totalAmountInitiated(totalAmountInitiated)
+                        .totalTransfersSettled(totalTransfersSettled)
+                        .totalAmountSettled(totalAmountSettled)
+                        .fraudAlertsRaised(fraudAlertsRaised)
+                        .newUserRegistrations(newUserRegistrations)
+                        .pendingSettlementCount(pendingSettlementCount)
+                        .pendingSettlementAmount(pendingSettlementAmount)
+                        // Reconciliation fields
+                        .totalDebits(totalDebits)
+                        .totalCredits(totalCredits)
+                        .debitCount(debitCount)
+                        .creditCount(creditCount)
+                        .reconciliationBalanced(reconciliationBalanced)
+                        .reconciliationMismatch(reconciliationMismatch)
+                        .createdAt(LocalDateTime.now())
+                        .updatedAt(LocalDateTime.now())
+                        .build();
+            }
             dailySummaryRepository.save(summary);
 
+            // If reconciliation is not balanced, create a critical notification for all admins
+            if (!reconciliationBalanced) {
+                createAdminNotificationsForMismatch(summaryDate, reconciliationMismatch);
+            }
+
             // Log execution
-            String details = String.format("{\"batchId\":\"%s\",\"date\":\"%s\",\"totalTransfers\":%d,\"successfulTransfers\":%d,\"failedTransfers\":%d,\"totalAmount\":\"%s\"}",
-                    batchId, summaryDate, totalTransfers, successfulTransfers, failedTransfers, totalAmount);
+            String details = String.format("{\"batchId\":\"%s\",\"date\":\"%s\",\"initiated\":%d,\"settled\":%d,\"fraudAlerts\":%d,\"newUsers\":%d,\"pendingAmount\":\"%s\",\"reconciliationBalanced\":%s,\"mismatch\":\"%s\"}",
+                    batchId, summaryDate, totalTransfersInitiated, totalTransfersSettled, fraudAlertsRaised, newUserRegistrations, 
+                    pendingSettlementAmount, reconciliationBalanced, reconciliationMismatch);
             ScheduledJobLog log = ScheduledJobLog.builder()
-                    .jobName("generate_daily_summary")
+                    .jobName("daily_summary_reconciliation")
                     .executionTime(LocalDateTime.now())
                     .status(ScheduledJobStatus.SUCCESS)
                     .details(details)
@@ -249,12 +346,31 @@ public class ScheduledJobService {
             // Log execution failure
             String details = String.format("{\"batchId\":\"%s\",\"error\":\"%s\"}", batchId, e.getMessage());
             ScheduledJobLog log = ScheduledJobLog.builder()
-                    .jobName("generate_daily_summary")
+                    .jobName("daily_summary_reconciliation")
                     .executionTime(LocalDateTime.now())
                     .status(ScheduledJobStatus.FAILED)
                     .details(details)
                     .build();
             scheduledJobLogRepository.save(log);
+        }
+    }
+
+    // Helper method to create notifications for all admin users when reconciliation mismatch is detected
+    private void createAdminNotificationsForMismatch(LocalDate date, BigDecimal mismatch) {
+        // Get all admin users
+        List<User> adminUsers = userRepository.findAll().stream()
+                .filter(u -> u.getRole() == Role.ADMIN)
+                .toList();
+
+        for (User admin : adminUsers) {
+            Notification notification = Notification.builder()
+                    .userId(admin.getId())
+                    .type(NotificationType.SYSTEM)
+                    .message("⚠️ CRITICAL: Reconciliation mismatch detected for " + date + ". Mismatch amount: ₹" + mismatch + ". Please review immediately.")
+                    .isRead(false)
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            notificationRepository.save(notification);
         }
     }
 

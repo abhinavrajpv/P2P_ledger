@@ -25,17 +25,51 @@ public class DailySummary {
     @Column(name = "summary_date", nullable = false, unique = true)
     private LocalDate summaryDate;
 
-    @Column(name = "total_transfers", nullable = false)
-    private Long totalTransfers;
+    // Transfer statistics - initiated (all statuses)
+    @Column(name = "total_transfers_initiated", nullable = false)
+    private Long totalTransfersInitiated;
 
-    @Column(name = "total_amount", nullable = false)
-    private BigDecimal totalAmount;
+    @Column(name = "total_amount_initiated", nullable = false)
+    private BigDecimal totalAmountInitiated;
 
-    @Column(name = "successful_transfers", nullable = false)
-    private Long successfulTransfers;
+    // Transfer statistics - settled (successful only)
+    @Column(name = "total_transfers_settled", nullable = false)
+    private Long totalTransfersSettled;
 
-    @Column(name = "failed_transfers", nullable = false)
-    private Long failedTransfers;
+    @Column(name = "total_amount_settled", nullable = false)
+    private BigDecimal totalAmountSettled;
+
+    // Additional statistics
+    @Column(name = "fraud_alerts_raised", nullable = false)
+    private Long fraudAlertsRaised;
+
+    @Column(name = "new_user_registrations", nullable = false)
+    private Long newUserRegistrations;
+
+    @Column(name = "pending_settlement_count", nullable = false)
+    private Long pendingSettlementCount;
+
+    @Column(name = "pending_settlement_amount", nullable = false)
+    private BigDecimal pendingSettlementAmount;
+
+    // Reconciliation data
+    @Column(name = "total_debits", nullable = false)
+    private BigDecimal totalDebits;
+
+    @Column(name = "total_credits", nullable = false)
+    private BigDecimal totalCredits;
+
+    @Column(name = "debit_count", nullable = false)
+    private Long debitCount;
+
+    @Column(name = "credit_count", nullable = false)
+    private Long creditCount;
+
+    @Column(name = "reconciliation_balanced", nullable = false)
+    private Boolean reconciliationBalanced;
+
+    @Column(name = "reconciliation_mismatch", nullable = false)
+    private BigDecimal reconciliationMismatch;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

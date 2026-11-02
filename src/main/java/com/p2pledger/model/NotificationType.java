@@ -8,5 +8,6 @@ public enum NotificationType {
     BLOCKED,
     LOCKED,
     UNLOCKED,
-    FRAUD_ALERT
+    FRAUD_ALERT,
+    SYSTEM
 }
