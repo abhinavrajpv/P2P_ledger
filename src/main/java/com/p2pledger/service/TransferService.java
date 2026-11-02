@@ -153,10 +153,6 @@ public class TransferService {
         createNotification(senderId, NotificationType.TRANSFER_INITIATED,
                 "Transfer of ₹" + amount + " initiated to " + receiver.getName());
 
-        // Update audit log
-        createAuditLog(senderId, "TRANSFER_INITIATED", "Transfer", transfer.getId().toString(),
-                "Transfer of " + amount + " to user " + receiverId);
-
         return transfer;
     }
 
@@ -301,46 +297,27 @@ public class TransferService {
         createNotification(transfer.getSenderId(), NotificationType.REFUND,
                 "₹" + amount + " transfer to " + receiverName + " failed. Amount refunded to your wallet");
 
-        // Update audit log
-        createAuditLog(transfer.getSenderId(), "TRANSFER_REFUNDED", "Transfer", transferId.toString(),
-                "Transfer " + transferId + " refunded by admin");
-
         return transfer;
     }
 
     public Page<TransferHistoryDto> getTransactionHistory(Long userId, Integer page, Integer size,
                                                            String type, String status, LocalDateTime startDate, LocalDateTime endDate) {
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        // Note: We fetch ALL matching records and filter in-memory because:
+        // 1. Type (DEBIT/CREDIT) is perspective-based - can't filter in DB
+        // 2. Receivers shouldn't see PENDING/DECLINED incoming transfers
+        // This is acceptable for reasonable data sizes
         
-        // Build query based on filters
-        org.springframework.data.domain.Page<Transfer> transfers;
+        // Build unpaged query to get all matching transfers
+        List<Transfer> allTransfers;
         
         if (startDate != null && endDate != null) {
-            // Filter by date range
-            transfers = transferRepository.findByUserId(userId, pageable).stream()
-                    .filter(t -> t.getCreatedAt().isAfter(startDate.minusSeconds(1)) && 
-                                 t.getCreatedAt().isBefore(endDate.plusSeconds(1)))
-                    .collect(java.util.stream.Collectors.collectingAndThen(
-                            java.util.stream.Collectors.toList(),
-                            list -> new org.springframework.data.domain.PageImpl<>(list, pageable, list.size())
-                    ));
+            allTransfers = transferRepository.findByUserIdAndCreatedAtBetweenUnpaged(userId, startDate, endDate);
         } else if (startDate != null) {
-            transfers = transferRepository.findByUserId(userId, pageable).stream()
-                    .filter(t -> t.getCreatedAt().isAfter(startDate.minusSeconds(1)))
-                    .collect(java.util.stream.Collectors.collectingAndThen(
-                            java.util.stream.Collectors.toList(),
-                            list -> new org.springframework.data.domain.PageImpl<>(list, pageable, list.size())
-                    ));
+            allTransfers = transferRepository.findByUserIdAndCreatedAtAfterUnpaged(userId, startDate);
         } else if (endDate != null) {
-            transfers = transferRepository.findByUserId(userId, pageable).stream()
-                    .filter(t -> t.getCreatedAt().isBefore(endDate.plusSeconds(1)))
-                    .collect(java.util.stream.Collectors.collectingAndThen(
-                            java.util.stream.Collectors.toList(),
-                            list -> new org.springframework.data.domain.PageImpl<>(list, pageable, list.size())
-                    ));
+            allTransfers = transferRepository.findByUserIdAndCreatedAtBeforeUnpaged(userId, endDate);
         } else {
-            // No date filter
-            transfers = transferRepository.findByUserIdWithFilters(userId, pageable);
+            allTransfers = transferRepository.findByUserIdUnpaged(userId);
         }
         
         // Get masking preference for this user
@@ -348,60 +325,65 @@ public class TransferService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         boolean maskingEnabled = user.isMaskingEnabled();
         
-        // Map transfers to DTOs with masking applied and filters
-        org.springframework.data.domain.Page<TransferHistoryDto> dtoPage = transfers.map(transfer -> {
-            User sender = userRepository.findById(transfer.getSenderId())
-                    .orElse(new User());
-            User receiver = userRepository.findById(transfer.getReceiverId())
-                    .orElse(new User());
-            
-            // Determine type from the perspective of userId
-            String transferType = transfer.getSenderId().equals(userId) ? "DEBIT" : "CREDIT";
-            
-            // IMPORTANT: Receiver should NOT see PENDING or DECLINED transfers
-            // (they don't know about incoming money until it's successfully settled)
-            if (transferType.equals("CREDIT") && 
-                (transfer.getStatus() == TransferStatus.PENDING || transfer.getStatus() == TransferStatus.DECLINED)) {
-                return null; // Filter out - receiver doesn't see pending or failed incoming transfers
-            }
-            
-            // Apply type filter (client-side since it's perspective-based)
-            if (type != null && !type.isEmpty() && !type.equalsIgnoreCase(transferType)) {
-                return null; // Filter out
-            }
-            
-            // Apply status filter
-            if (status != null && !status.isEmpty() && !status.equalsIgnoreCase(transfer.getStatus().name())) {
-                return null; // Filter out
-            }
+        // Map and filter transfers to DTOs
+        List<TransferHistoryDto> allDtos = allTransfers.stream()
+                .map(transfer -> {
+                    User sender = userRepository.findById(transfer.getSenderId()).orElse(new User());
+                    User receiver = userRepository.findById(transfer.getReceiverId()).orElse(new User());
+                    
+                    // Determine type from the perspective of userId
+                    String transferType = transfer.getSenderId().equals(userId) ? "DEBIT" : "CREDIT";
+                    
+                    // IMPORTANT: Receiver should NOT see PENDING or DECLINED transfers
+                    if (transferType.equals("CREDIT") && 
+                        (transfer.getStatus() == TransferStatus.PENDING || transfer.getStatus() == TransferStatus.DECLINED)) {
+                        return null;
+                    }
+                    
+                    // Apply type filter
+                    if (type != null && !type.isEmpty() && !type.equalsIgnoreCase(transferType)) {
+                        return null;
+                    }
+                    
+                    // Apply status filter
+                    if (status != null && !status.isEmpty() && !status.equalsIgnoreCase(transfer.getStatus().name())) {
+                        return null;
+                    }
 
-            return TransferHistoryDto.builder()
-                    .id(transfer.getId())
-                    .amount(transfer.getAmount())
-                    .requestId(transfer.getRequestId())
-                    .type(transferType)
-                    .status(transfer.getStatus())
-                    .createdAt(transfer.getCreatedAt())
-                    .settlementDate(transfer.getSettlementDate())
-                    .fraudFlagged(transfer.isFraudFlagged())
-                    .adminReviewStatus(transfer.getAdminReviewStatus())
-                    // Counterparty details - masked if user's masking preference is enabled
-                    .senderName(maskingEnabled ? null : sender.getName())
-                    .senderEmail(maskingEnabled ? null : sender.getEmail())
-                    .senderPhone(maskingEnabled ? null : sender.getPhone())
-                    .receiverName(maskingEnabled ? null : receiver.getName())
-                    .receiverEmail(maskingEnabled ? null : receiver.getEmail())
-                    .receiverPhone(maskingEnabled ? null : receiver.getPhone())
-                    .daysUntilSettlement(calculateDaysUntilSettlement(transfer.getSettlementDate()))
-                    .build();
-        });
-        
-        // Remove null entries (filtered out)
-        java.util.List<TransferHistoryDto> filteredList = dtoPage.getContent().stream()
+                    return TransferHistoryDto.builder()
+                            .id(transfer.getId())
+                            .amount(transfer.getAmount())
+                            .requestId(transfer.getRequestId())
+                            .type(transferType)
+                            .status(transfer.getStatus())
+                            .createdAt(transfer.getCreatedAt())
+                            .settlementDate(transfer.getSettlementDate())
+                            .fraudFlagged(transfer.isFraudFlagged())
+                            .adminReviewStatus(transfer.getAdminReviewStatus())
+                            .senderName(maskingEnabled ? null : sender.getName())
+                            .senderEmail(maskingEnabled ? null : sender.getEmail())
+                            .senderPhone(maskingEnabled ? null : sender.getPhone())
+                            .receiverName(maskingEnabled ? null : receiver.getName())
+                            .receiverEmail(maskingEnabled ? null : receiver.getEmail())
+                            .receiverPhone(maskingEnabled ? null : receiver.getPhone())
+                            .daysUntilSettlement(calculateDaysUntilSettlement(transfer.getSettlementDate()))
+                            .build();
+                })
                 .filter(dto -> dto != null)
                 .collect(java.util.stream.Collectors.toList());
         
-        return new org.springframework.data.domain.PageImpl<>(filteredList, pageable, filteredList.size());
+        // Now apply manual pagination
+        int totalElements = allDtos.size();
+        int totalPages = (int) Math.ceil((double) totalElements / size);
+        int start = page * size;
+        int end = Math.min(start + size, totalElements);
+        
+        List<TransferHistoryDto> pageContent = start < totalElements 
+                ? allDtos.subList(start, end) 
+                : java.util.Collections.emptyList();
+        
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        return new org.springframework.data.domain.PageImpl<>(pageContent, pageable, totalElements);
     }
 
     public Transfer getTransferById(Long id) {

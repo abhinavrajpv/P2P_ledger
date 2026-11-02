@@ -167,10 +167,6 @@ public class ScheduledJobService {
                 user.setFailedLoginCount(0);
                 userRepository.save(user);
                 unlockedCount++;
-
-                // Log audit event
-                createAuditLog(user.getId(), "ACCOUNT_UNLOCKED", "User", user.getId().toString(),
-                        "Account unlocked after lockout period expired");
             }
 
             checkedCount = lockedUsers.size();

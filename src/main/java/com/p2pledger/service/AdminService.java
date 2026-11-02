@@ -223,7 +223,7 @@ public class AdminService {
     }
 
     @Transactional
-    public Transfer processSettlement(Long transferId) {
+    public Transfer processSettlement(Long transferId, Long adminUserId) {
         Transfer transfer = transferRepository.findById(transferId)
                 .orElseThrow(() -> new IllegalArgumentException("Transfer not found"));
 
@@ -247,7 +247,7 @@ public class AdminService {
         // Check receiver wallet status before settlement
         if (receiverWallet.getStatus() != WalletStatus.ACTIVE) {
             // Receiver wallet is not active - follow decline/refund rules
-            return refundTransferInternal(transfer, senderWallet, receiverWallet);
+            return refundTransferInternal(transfer, senderWallet, receiverWallet, adminUserId);
         }
 
         BigDecimal amount = transfer.getAmount();
@@ -300,6 +300,17 @@ public class AdminService {
                 .build();
         notificationRepository.save(receiverNotification);
 
+        // Create audit log for admin manual settlement
+        AuditLog auditLog = AuditLog.builder()
+                .actorUserId(adminUserId)
+                .action("SETTLEMENT_PROCESSED")
+                .entityType("Transfer")
+                .entityId(transfer.getId().toString())
+                .details("Admin manually processed settlement of ₹" + amount + " from user " + transfer.getSenderId() + " to user " + transfer.getReceiverId())
+                .createdAt(LocalDateTime.now())
+                .build();
+        auditLogRepository.save(auditLog);
+
         return transfer;
     }
 
@@ -310,7 +321,7 @@ public class AdminService {
     }
 
     @Transactional
-    public Transfer approveTransaction(Long fraudAlertId) {
+    public Transfer approveTransaction(Long fraudAlertId, Long adminUserId) {
         FraudAlert fraudAlert = fraudAlertRepository.findById(fraudAlertId)
                 .orElseThrow(() -> new IllegalArgumentException("Fraud alert not found"));
         
@@ -330,11 +341,22 @@ public class AdminService {
         transfer.setAdminReviewStatus(AdminReviewStatus.APPROVED);
         transferRepository.save(transfer);
 
+        // Create audit log for admin action
+        AuditLog auditLog = AuditLog.builder()
+                .actorUserId(adminUserId)
+                .action("TRANSFER_APPROVED")
+                .entityType("Transfer")
+                .entityId(transfer.getId().toString())
+                .details("Admin approved transfer of ₹" + transfer.getAmount() + " from user " + transfer.getSenderId() + " to user " + transfer.getReceiverId())
+                .createdAt(LocalDateTime.now())
+                .build();
+        auditLogRepository.save(auditLog);
+
         return transfer;
     }
 
     @Transactional
-    public Transfer refundTransaction(Long fraudAlertId) {
+    public Transfer refundTransaction(Long fraudAlertId, Long adminUserId) {
         FraudAlert fraudAlert = fraudAlertRepository.findById(fraudAlertId)
                 .orElseThrow(() -> new IllegalArgumentException("Fraud alert not found"));
         
@@ -356,10 +378,10 @@ public class AdminService {
 
         BigDecimal amount = transfer.getAmount();
 
-        return refundTransferInternal(transfer, senderWallet, null);
+        return refundTransferInternal(transfer, senderWallet, null, adminUserId);
     }
 
-    private Transfer refundTransferInternal(Transfer transfer, Wallet senderWallet, Wallet receiverWallet) {
+    private Transfer refundTransferInternal(Transfer transfer, Wallet senderWallet, Wallet receiverWallet, Long adminUserId) {
         BigDecimal amount = transfer.getAmount();
 
         // Credit sender wallet (refund)
@@ -414,6 +436,17 @@ public class AdminService {
                 .createdAt(LocalDateTime.now())
                 .build();
         notificationRepository.save(senderNotification);
+
+        // Create audit log for admin action
+        AuditLog auditLog = AuditLog.builder()
+                .actorUserId(adminUserId)
+                .action("TRANSFER_REFUNDED")
+                .entityType("Transfer")
+                .entityId(transfer.getId().toString())
+                .details("Admin refunded transfer of ₹" + amount + " for user " + transfer.getSenderId())
+                .createdAt(LocalDateTime.now())
+                .build();
+        auditLogRepository.save(auditLog);
 
         return transfer;
     }
@@ -573,7 +606,7 @@ public class AdminService {
     
     // Freeze user wallet (set to FROZEN status)
     @Transactional
-    public void freezeUserWallet(Long userId) {
+    public void freezeUserWallet(Long userId, Long adminUserId) {
         Wallet wallet = walletRepository.findByUserId(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Wallet not found for user"));
         
@@ -586,7 +619,7 @@ public class AdminService {
         
         // Create audit log
         AuditLog auditLog = AuditLog.builder()
-                .actorUserId(userId)
+                .actorUserId(adminUserId)
                 .action("WALLET_FROZEN")
                 .entityType("WALLET")
                 .entityId(userId.toString())
@@ -598,7 +631,7 @@ public class AdminService {
     
     // Unfreeze user wallet (set to ACTIVE status)
     @Transactional
-    public void unfreezeUserWallet(Long userId) {
+    public void unfreezeUserWallet(Long userId, Long adminUserId) {
         Wallet wallet = walletRepository.findByUserId(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Wallet not found for user"));
         
@@ -611,7 +644,7 @@ public class AdminService {
         
         // Create audit log
         AuditLog auditLog = AuditLog.builder()
-                .actorUserId(userId)
+                .actorUserId(adminUserId)
                 .action("WALLET_UNFROZEN")
                 .entityType("WALLET")
                 .entityId(userId.toString())

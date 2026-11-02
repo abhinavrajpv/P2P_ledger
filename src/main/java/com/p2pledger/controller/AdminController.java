@@ -51,7 +51,8 @@ public class AdminController {
     
     @PostMapping("/users/{userId}/freeze")
     public ResponseEntity<Map<String, String>> freezeUserWallet(@PathVariable Long userId, Authentication authentication) {
-        adminService.freezeUserWallet(userId);
+        Long adminUserId = Long.parseLong(authentication.getName());
+        adminService.freezeUserWallet(userId, adminUserId);
         Map<String, String> response = new HashMap<>();
         response.put("message", "User wallet frozen successfully");
         return ResponseEntity.ok(response);
@@ -59,7 +60,8 @@ public class AdminController {
     
     @PostMapping("/users/{userId}/unfreeze")
     public ResponseEntity<Map<String, String>> unfreezeUserWallet(@PathVariable Long userId, Authentication authentication) {
-        adminService.unfreezeUserWallet(userId);
+        Long adminUserId = Long.parseLong(authentication.getName());
+        adminService.unfreezeUserWallet(userId, adminUserId);
         Map<String, String> response = new HashMap<>();
         response.put("message", "User wallet unfrozen successfully");
         return ResponseEntity.ok(response);
@@ -99,7 +101,8 @@ public class AdminController {
 
     @PostMapping("/settlements/process")
     public ResponseEntity<Transfer> processSettlement(@RequestBody ProcessSettlementRequest request, Authentication authentication) {
-        return ResponseEntity.ok(adminService.processSettlement(request.getTransferId()));
+        Long adminUserId = Long.parseLong(authentication.getName());
+        return ResponseEntity.ok(adminService.processSettlement(request.getTransferId(), adminUserId));
     }
 
     @GetMapping("/fraud")
@@ -109,12 +112,14 @@ public class AdminController {
 
     @PostMapping("/fraud/{id}/approve")
     public ResponseEntity<Transfer> approveTransaction(@PathVariable Long id, Authentication authentication) {
-        return ResponseEntity.ok(adminService.approveTransaction(id));
+        Long adminUserId = Long.parseLong(authentication.getName());
+        return ResponseEntity.ok(adminService.approveTransaction(id, adminUserId));
     }
 
     @PostMapping("/fraud/{id}/refund")
     public ResponseEntity<Transfer> refundTransaction(@PathVariable Long id, Authentication authentication) {
-        return ResponseEntity.ok(adminService.refundTransaction(id));
+        Long adminUserId = Long.parseLong(authentication.getName());
+        return ResponseEntity.ok(adminService.refundTransaction(id, adminUserId));
     }
 
     @GetMapping("/jobs")

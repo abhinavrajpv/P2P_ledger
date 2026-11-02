@@ -65,6 +65,45 @@ public interface TransferRepository extends JpaRepository<Transfer, Long> {
 
     @Query("SELECT t FROM Transfer t WHERE (t.senderId = :userId OR t.receiverId = :userId) " +
            "ORDER BY t.createdAt DESC")
+    List<Transfer> findByUserIdUnpaged(@Param("userId") Long userId);
+
+    @Query("SELECT t FROM Transfer t WHERE (t.senderId = :userId OR t.receiverId = :userId) " +
+           "AND t.createdAt BETWEEN :startDate AND :endDate ORDER BY t.createdAt DESC")
+    Page<Transfer> findByUserIdAndCreatedAtBetween(@Param("userId") Long userId,
+                                                    @Param("startDate") LocalDateTime startDate,
+                                                    @Param("endDate") LocalDateTime endDate,
+                                                    Pageable pageable);
+
+    @Query("SELECT t FROM Transfer t WHERE (t.senderId = :userId OR t.receiverId = :userId) " +
+           "AND t.createdAt BETWEEN :startDate AND :endDate ORDER BY t.createdAt DESC")
+    List<Transfer> findByUserIdAndCreatedAtBetweenUnpaged(@Param("userId") Long userId,
+                                                           @Param("startDate") LocalDateTime startDate,
+                                                           @Param("endDate") LocalDateTime endDate);
+
+    @Query("SELECT t FROM Transfer t WHERE (t.senderId = :userId OR t.receiverId = :userId) " +
+           "AND t.createdAt >= :startDate ORDER BY t.createdAt DESC")
+    Page<Transfer> findByUserIdAndCreatedAtAfter(@Param("userId") Long userId,
+                                                  @Param("startDate") LocalDateTime startDate,
+                                                  Pageable pageable);
+
+    @Query("SELECT t FROM Transfer t WHERE (t.senderId = :userId OR t.receiverId = :userId) " +
+           "AND t.createdAt >= :startDate ORDER BY t.createdAt DESC")
+    List<Transfer> findByUserIdAndCreatedAtAfterUnpaged(@Param("userId") Long userId,
+                                                         @Param("startDate") LocalDateTime startDate);
+
+    @Query("SELECT t FROM Transfer t WHERE (t.senderId = :userId OR t.receiverId = :userId) " +
+           "AND t.createdAt <= :endDate ORDER BY t.createdAt DESC")
+    Page<Transfer> findByUserIdAndCreatedAtBefore(@Param("userId") Long userId,
+                                                   @Param("endDate") LocalDateTime endDate,
+                                                   Pageable pageable);
+
+    @Query("SELECT t FROM Transfer t WHERE (t.senderId = :userId OR t.receiverId = :userId) " +
+           "AND t.createdAt <= :endDate ORDER BY t.createdAt DESC")
+    List<Transfer> findByUserIdAndCreatedAtBeforeUnpaged(@Param("userId") Long userId,
+                                                          @Param("endDate") LocalDateTime endDate);
+
+    @Query("SELECT t FROM Transfer t WHERE (t.senderId = :userId OR t.receiverId = :userId) " +
+           "ORDER BY t.createdAt DESC")
     Page<Transfer> findByUserIdWithFilters(@Param("userId") Long userId,
                                            Pageable pageable);
     
