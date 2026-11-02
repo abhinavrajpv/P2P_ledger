@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
 import { setAuth, clearAuth, getUser } from '../../auth';
+import './AuthContainer.css';
 
 const AuthContainer = () => {
     const [isLogin, setIsLogin] = useState(true);
@@ -50,41 +51,58 @@ const AuthContainer = () => {
     }, [loginSuccess, navigate]);
 
     return (
-        <div className="auth-container">
-            <div className="auth-toggle">
-                <button
-                    className={isLogin ? 'active' : ''}
-                    onClick={() => { setIsLogin(true); setMessage(''); }}
-                >
-                    Login
-                </button>
-                <button
-                    className={!isLogin ? 'active' : ''}
-                    onClick={() => { setIsLogin(false); setMessage(''); }}
-                >
-                    Register
-                </button>
+        <div className="auth-page">
+            <div className="auth-background">
+                <div className="auth-overlay"></div>
             </div>
+            
+            <div className="auth-content">
+                <div className="auth-card">
+                    <div className="auth-header">
+                        <h1 className="auth-logo">💳 P2P Ledger</h1>
+                        <p className="auth-subtitle">Secure peer-to-peer payments</p>
+                    </div>
 
-            {loginSuccess ? (
-                <div className="success-message">
-                    <p>{message}</p>
-                    <button onClick={handleLogout}>Logout</button>
-                </div>
-            ) : (
-                <>
-                    {isLogin ? (
-                        <LoginForm onLogin={handleLogin} onError={handleError} />
-                    ) : (
-                        <RegisterForm onRegister={handleRegister} onError={handleError} />
-                    )}
-                    {message && (
-                        <div className={`message ${message.toLowerCase().includes('success') || message.toLowerCase().includes('welcome') ? 'success' : 'error'}`}>
-                            {message}
+                    <div className="auth-toggle">
+                        <button
+                            className={isLogin ? 'toggle-btn active' : 'toggle-btn'}
+                            onClick={() => { setIsLogin(true); setMessage(''); }}
+                        >
+                            Login
+                        </button>
+                        <button
+                            className={!isLogin ? 'toggle-btn active' : 'toggle-btn'}
+                            onClick={() => { setIsLogin(false); setMessage(''); }}
+                        >
+                            Register
+                        </button>
+                        <div className={`toggle-slider ${!isLogin ? 'right' : ''}`}></div>
+                    </div>
+
+                    {loginSuccess ? (
+                        <div className="success-message">
+                            <div className="success-icon">✓</div>
+                            <p>{message}</p>
+                            <button className="btn-logout" onClick={handleLogout}>Logout</button>
                         </div>
+                    ) : (
+                        <>
+                            <div className="form-container">
+                                {isLogin ? (
+                                    <LoginForm onLogin={handleLogin} onError={handleError} />
+                                ) : (
+                                    <RegisterForm onRegister={handleRegister} onError={handleError} />
+                                )}
+                            </div>
+                            {message && (
+                                <div className={`message-alert ${message.toLowerCase().includes('success') || message.toLowerCase().includes('welcome') ? 'success' : 'error'}`}>
+                                    {message}
+                                </div>
+                            )}
+                        </>
                     )}
-                </>
-            )}
+                </div>
+            </div>
         </div>
     );
 };

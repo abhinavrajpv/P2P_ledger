@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from '../../axiosConfig';
+import './TransferSummary.css';
 
 const TransferSummary = () => {
     const [summary, setSummary] = useState(null);
@@ -24,33 +25,75 @@ const TransferSummary = () => {
     }, []);
 
     if (error) {
-        return <div className="error">{error}</div>;
+        return <div className="summary-error">
+            <span className="error-icon">⚠️</span>
+            {error}
+        </div>;
     }
 
     if (!summary && !loading) {
-        return <button onClick={fetchSummary}>Load Summary</button>;
+        return (
+            <div className="transfer-summary-card">
+                <button className="btn-load-summary" onClick={fetchSummary}>
+                    Load Summary
+                </button>
+            </div>
+        );
     }
 
+    const totalSent = summary?.totalSent ? parseFloat(summary.totalSent) : 0;
+    const totalReceived = summary?.totalReceived ? parseFloat(summary.totalReceived) : 0;
+    const netBalance = totalReceived - totalSent;
+
     return (
-        <div className="transfer-summary">
-            <h3>Transfer Summary</h3>
-            <div className="summary-grid">
-                <div className="summary-item">
-                    <span className="label">Total Sent</span>
-                    <span className="value">{summary?.totalSent ? `₹${parseFloat(summary.totalSent).toFixed(2)}` : '₹0.00'}</span>
+        <div className="transfer-summary-card">
+            <div className="summary-header">
+                <div className="summary-title">
+                    <h3>💸 Transfer Summary</h3>
+                    <p className="summary-subtitle">Your transaction overview</p>
                 </div>
-                <div className="summary-item">
-                    <span className="label">Total Received</span>
-                    <span className="value">{summary?.totalReceived ? `₹${parseFloat(summary.totalReceived).toFixed(2)}` : '₹0.00'}</span>
+                <button 
+                    className={`btn-refresh ${loading ? 'loading' : ''}`}
+                    onClick={fetchSummary} 
+                    disabled={loading}
+                    title="Refresh Summary"
+                >
+                    <span className="refresh-icon">🔄</span>
+                </button>
+            </div>
+
+            <div className="summary-stats">
+                <div className="stat-card sent">
+                    <div className="stat-icon">📤</div>
+                    <div className="stat-content">
+                        <span className="stat-label">Total Sent</span>
+                        <span className="stat-value">₹{totalSent.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
                 </div>
-                <div className="summary-item">
-                    <span className="label">Monthly Transactions</span>
-                    <span className="value">{summary?.monthlyCount || 0}</span>
+
+                <div className="stat-card received">
+                    <div className="stat-icon">📥</div>
+                    <div className="stat-content">
+                        <span className="stat-label">Total Received</span>
+                        <span className="stat-value">₹{totalReceived.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                </div>
+
+                <div className="stat-card transactions">
+                    <div className="stat-icon">📊</div>
+                    <div className="stat-content">
+                        <span className="stat-label">Monthly Transactions</span>
+                        <span className="stat-value">{summary?.monthlyCount || 0}</span>
+                    </div>
                 </div>
             </div>
-            <button onClick={fetchSummary} disabled={loading}>
-                {loading ? 'Loading...' : 'Refresh Summary'}
-            </button>
+
+            <div className={`net-balance ${netBalance >= 0 ? 'positive' : 'negative'}`}>
+                <span className="balance-label">Net Balance</span>
+                <span className="balance-value">
+                    {netBalance >= 0 ? '+' : ''}₹{Math.abs(netBalance).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+            </div>
         </div>
     );
 };
