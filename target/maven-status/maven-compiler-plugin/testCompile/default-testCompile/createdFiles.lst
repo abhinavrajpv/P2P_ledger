@@ -1,0 +1,17 @@
+com\p2pledger\controller\AuthControllerTest.class
+com\p2pledger\controller\UserControllerTest.class
+com\p2pledger\controller\AdminControllerTest$MethodSecurityTestConfig.class
+com\p2pledger\service\FraudNotificationServiceTest.class
+com\p2pledger\controller\WalletControllerTest.class
+com\p2pledger\controller\MaskingControllerTest.class
+com\p2pledger\service\AdminServiceTest.class
+com\p2pledger\service\ScheduledJobServiceTest.class
+com\p2pledger\service\WalletServiceTest.class
+com\p2pledger\controller\TransferControllerTest.class
+com\p2pledger\service\AuthServiceTest.class
+com\p2pledger\controller\NotificationControllerTest.class
+com\p2pledger\service\JwtServiceTest.class
+com\p2pledger\controller\AdminControllerTest.class
+com\p2pledger\service\NotificationServiceTest.class
+com\p2pledger\aspect\PinVerificationAspectTest.class
+com\p2pledger\service\TransferServiceTest.class

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JwtAuthenticationFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.config</a> &gt; <span class="el_source">JwtAuthenticationFilter.java</span></div><h1>JwtAuthenticationFilter.java</h1><pre class="source lang-java linenums">package com.p2pledger.config;
+
+import com.p2pledger.service.JwtService;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.util.Collections;
+
+/**
+ * NOTE: This class intentionally does NOT have @Component.
+ * It is registered exactly once via SecurityConfig.addFilterBefore().
+ * Adding @Component would cause Spring Boot to also register it as a
+ * plain servlet filter, running it twice and clearing the SecurityContext
+ * on the second pass — which causes 403 on POST/PATCH/GET requests.
+ */
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private final JwtService jwtService;
+
+<span class="fc" id="L29">    public JwtAuthenticationFilter(JwtService jwtService) {</span>
+<span class="fc" id="L30">        this.jwtService = jwtService;</span>
+<span class="fc" id="L31">    }</span>
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+<span class="fc" id="L36">        String authorizationHeader = request.getHeader(&quot;Authorization&quot;);</span>
+
+<span class="fc bfc" id="L38" title="All 4 branches covered.">        if (authorizationHeader != null &amp;&amp; authorizationHeader.startsWith(&quot;Bearer &quot;)) {</span>
+<span class="fc" id="L39">            String token = authorizationHeader.substring(7);</span>
+
+<span class="fc bfc" id="L41" title="All 2 branches covered.">            if (jwtService.validateToken(token)) {</span>
+<span class="fc" id="L42">                Long userId = jwtService.extractUserId(token);</span>
+<span class="fc" id="L43">                String role = jwtService.extractRole(token);</span>
+
+<span class="fc" id="L45">                Authentication authentication = new UsernamePasswordAuthenticationToken(</span>
+<span class="fc" id="L46">                        userId, null, Collections.singletonList(new SimpleGrantedAuthority(&quot;ROLE_&quot; + role)));</span>
+
+<span class="fc" id="L48">                SecurityContext securityContext = SecurityContextHolder.createEmptyContext();</span>
+<span class="fc" id="L49">                securityContext.setAuthentication(authentication);</span>
+<span class="fc" id="L50">                SecurityContextHolder.setContext(securityContext);</span>
+            }
+        }
+
+<span class="fc" id="L54">        filterChain.doFilter(request, response);</span>
+<span class="fc" id="L55">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

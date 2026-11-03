@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerEntry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.model</a> &gt; <span class="el_source">LedgerEntry.java</span></div><h1>LedgerEntry.java</h1><pre class="source lang-java linenums">package com.p2pledger.model;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+<span class="pc bpc" id="L12" title="8 of 78 branches missed.">@Data</span>
+@Entity
+<span class="pc" id="L14">@Builder</span>
+<span class="fc" id="L15">@NoArgsConstructor</span>
+<span class="fc" id="L16">@AllArgsConstructor</span>
+@Table(name = &quot;ledger_entries&quot;)
+public class LedgerEntry {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+<span class="fc" id="L22">    private Long id;</span>
+
+    @Column(name = &quot;transfer_id&quot;)
+<span class="fc" id="L25">    private Long transferId;</span>
+
+    @Column(name = &quot;user_id&quot;, nullable = false)
+<span class="fc" id="L28">    private Long userId;</span>
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+<span class="fc" id="L32">    private LedgerType type;</span>
+
+    @Column(nullable = false)
+<span class="fc" id="L35">    private BigDecimal amount;</span>
+
+    @Column(name = &quot;balance_before&quot;, nullable = false)
+<span class="fc" id="L38">    private BigDecimal balanceBefore;</span>
+
+    @Column(name = &quot;balance_after&quot;, nullable = false)
+<span class="fc" id="L41">    private BigDecimal balanceAfter;</span>
+
+    @Column(name = &quot;reference_id&quot;)
+<span class="fc" id="L44">    private String referenceId;</span>
+
+    @Column(name = &quot;created_at&quot;, nullable = false)
+<span class="fc" id="L47">    private LocalDateTime createdAt;</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

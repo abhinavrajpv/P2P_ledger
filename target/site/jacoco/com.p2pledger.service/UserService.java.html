@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UserService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.service</a> &gt; <span class="el_source">UserService.java</span></div><h1>UserService.java</h1><pre class="source lang-java linenums">package com.p2pledger.service;
+
+import com.p2pledger.model.User;
+import com.p2pledger.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class UserService {
+
+    private final UserRepository userRepository;
+
+    public List&lt;UserSearchResult&gt; searchUsers(String query) {
+<span class="fc" id="L18">        List&lt;User&gt; users = userRepository.searchUsers(query);</span>
+<span class="fc" id="L19">        return users.stream()</span>
+<span class="fc" id="L20">                .map(user -&gt; new UserSearchResult(</span>
+<span class="fc" id="L21">                        user.getId(),</span>
+<span class="fc" id="L22">                        user.getName(),</span>
+<span class="fc" id="L23">                        user.getEmail(),</span>
+<span class="fc" id="L24">                        user.getPhone()</span>
+<span class="fc" id="L25">                ))</span>
+<span class="fc" id="L26">                .collect(Collectors.toList());</span>
+    }
+
+    public UserSearchResult getUserById(Long userId) {
+<span class="fc" id="L30">        User user = userRepository.findById(userId)</span>
+<span class="fc" id="L31">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;User not found&quot;));</span>
+<span class="fc" id="L32">        return new UserSearchResult(</span>
+<span class="fc" id="L33">                user.getId(),</span>
+<span class="fc" id="L34">                user.getName(),</span>
+<span class="fc" id="L35">                user.getEmail(),</span>
+<span class="fc" id="L36">                user.getPhone()</span>
+        );
+    }
+    
+    public User getUserEntityById(Long userId) {
+<span class="fc" id="L41">        return userRepository.findById(userId)</span>
+<span class="fc" id="L42">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;User not found&quot;));</span>
+    }
+
+    public static class UserSearchResult {
+        private final Long id;
+        private final String name;
+        private final String email;
+        private final String phone;
+
+<span class="fc" id="L51">        public UserSearchResult(Long id, String name, String email, String phone) {</span>
+<span class="fc" id="L52">            this.id = id;</span>
+<span class="fc" id="L53">            this.name = name;</span>
+<span class="fc" id="L54">            this.email = email;</span>
+<span class="fc" id="L55">            this.phone = phone;</span>
+<span class="fc" id="L56">        }</span>
+
+<span class="fc" id="L58">        public Long getId() { return id; }</span>
+<span class="fc" id="L59">        public String getName() { return name; }</span>
+<span class="fc" id="L60">        public String getEmail() { return email; }</span>
+<span class="fc" id="L61">        public String getPhone() { return phone; }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

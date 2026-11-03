@@ -1,0 +1,881 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TransferService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.service</a> &gt; <span class="el_source">TransferService.java</span></div><h1>TransferService.java</h1><pre class="source lang-java linenums">package com.p2pledger.service;
+
+import com.p2pledger.annotation.RequirePin;
+import com.p2pledger.model.*;
+import com.p2pledger.repository.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class TransferService {
+
+<span class="fc" id="L22">    private static final BigDecimal DAILY_LIMIT = BigDecimal.valueOf(50000);</span>
+<span class="fc" id="L23">    private static final BigDecimal ADMIN_REVIEW_THRESHOLD = BigDecimal.valueOf(8000);</span>
+
+    private final UserRepository userRepository;
+    private final WalletRepository walletRepository;
+    private final TransferRepository transferRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
+    private final FraudAlertRepository fraudAlertRepository;
+    private final NotificationRepository notificationRepository;
+    private final AuditLogRepository auditLogRepository;
+    private final WalletService walletService;
+    private final PasswordEncoder passwordEncoder;
+    private final FraudNotificationService fraudNotificationService;
+
+    @Transactional
+    @RequirePin(message = &quot;Invalid transaction PIN&quot;, userIdIndex = 0, pinIndex = 4)
+    public Transfer initiateTransfer(Long senderId, Long receiverId, BigDecimal amount, String requestId, String pin) {
+        // Reject self-transfers
+<span class="fc bfc" id="L40" title="All 2 branches covered.">        if (senderId.equals(receiverId)) {</span>
+<span class="fc" id="L41">            throw new IllegalArgumentException(&quot;Cannot transfer to yourself&quot;);</span>
+        }
+
+        // Validate sender and receiver exist
+<span class="fc" id="L45">        User sender = userRepository.findById(senderId)</span>
+<span class="fc" id="L46">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Sender not found&quot;));</span>
+<span class="fc" id="L47">        User receiver = userRepository.findById(receiverId)</span>
+<span class="fc" id="L48">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Receiver not found&quot;));</span>
+
+        // Validate amount
+<span class="fc bfc" id="L51" title="All 4 branches covered.">        if (amount == null || amount.compareTo(BigDecimal.ZERO) &lt;= 0) {</span>
+<span class="fc" id="L52">            throw new IllegalArgumentException(&quot;Amount must be positive&quot;);</span>
+        }
+
+        // Validate wallet statuses
+<span class="fc" id="L56">        Wallet senderWallet = walletRepository.findByUserId(senderId)</span>
+<span class="fc" id="L57">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Sender wallet not found&quot;));</span>
+<span class="fc" id="L58">        Wallet receiverWallet = walletRepository.findByUserId(receiverId)</span>
+<span class="fc" id="L59">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Receiver wallet not found&quot;));</span>
+
+<span class="fc bfc" id="L61" title="All 2 branches covered.">        if (senderWallet.getStatus() != WalletStatus.ACTIVE) {</span>
+<span class="fc" id="L62">            throw new IllegalArgumentException(&quot;Sender wallet is not active&quot;);</span>
+        }
+<span class="fc bfc" id="L64" title="All 2 branches covered.">        if (receiverWallet.getStatus() != WalletStatus.ACTIVE) {</span>
+<span class="fc" id="L65">            throw new IllegalArgumentException(&quot;Receiver wallet is not active&quot;);</span>
+        }
+
+        // Check for sufficient funds
+<span class="fc bfc" id="L69" title="All 2 branches covered.">        if (senderWallet.getBalance().compareTo(amount) &lt; 0) {</span>
+<span class="fc" id="L70">            throw new IllegalArgumentException(&quot;Insufficient funds&quot;);</span>
+        }
+
+        // Check for duplicate requestId (idempotency)
+<span class="fc" id="L74">        Transfer existingTransfer = transferRepository.findByRequestId(requestId).orElse(null);</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        if (existingTransfer != null) {</span>
+            // Verify the existing transfer is for the same sender and has same details
+<span class="fc bfc" id="L77" title="All 2 branches covered.">            if (!existingTransfer.getSenderId().equals(senderId)) {</span>
+<span class="fc" id="L78">                throw new IllegalArgumentException(&quot;Request ID already used by another user&quot;);</span>
+            }
+<span class="fc bfc" id="L80" title="All 2 branches covered.">            if (!existingTransfer.getReceiverId().equals(receiverId) ||</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">                !existingTransfer.getAmount().equals(amount)) {</span>
+<span class="fc" id="L82">                throw new IllegalArgumentException(&quot;Request ID conflict: different transfer details&quot;);</span>
+            }
+            // Idempotency: return original transfer
+<span class="fc" id="L85">            return existingTransfer;</span>
+        }
+
+        // Check for suspected duplicates (same receiver, same amount, within 2 minutes)
+<span class="fc bfc" id="L89" title="All 2 branches covered.">        if (isSuspectedDuplicate(senderId, receiverId, amount)) {</span>
+            // Notify all admins about the duplicate transaction attempt (in separate transaction)
+<span class="fc" id="L91">            fraudNotificationService.notifyAdminsAboutDuplicateTransfer(</span>
+<span class="fc" id="L92">                    senderId, sender.getName(), receiverId, receiver.getName(), amount);</span>
+<span class="fc" id="L93">            throw new IllegalArgumentException(&quot;Suspected duplicate transfer detected&quot;);</span>
+        }
+
+        // Check daily spending limit
+<span class="fc" id="L97">        BigDecimal todaySpending = senderWallet.getTodaySpending();</span>
+<span class="fc bfc" id="L98" title="All 2 branches covered.">        if (todaySpending.add(amount).compareTo(DAILY_LIMIT) &gt; 0) {</span>
+            // Notify all admins about the daily limit violation attempt (in separate transaction)
+<span class="fc" id="L100">            fraudNotificationService.notifyAdminsAboutDailyLimitViolation(</span>
+<span class="fc" id="L101">                    senderId, sender.getName(), amount, todaySpending, DAILY_LIMIT);</span>
+<span class="fc" id="L102">            throw new IllegalArgumentException(&quot;Daily spending limit exceeded&quot;);</span>
+        }
+
+        // Create transfer with PENDING status
+<span class="fc" id="L106">        Transfer transfer = Transfer.builder()</span>
+<span class="fc" id="L107">                .senderId(senderId)</span>
+<span class="fc" id="L108">                .receiverId(receiverId)</span>
+<span class="fc" id="L109">                .amount(amount)</span>
+<span class="fc" id="L110">                .requestId(requestId)</span>
+<span class="fc" id="L111">                .status(TransferStatus.PENDING)</span>
+<span class="fc" id="L112">                .createdAt(LocalDateTime.now())</span>
+<span class="fc" id="L113">                .settlementDate(calculateSettlementDate())</span>
+<span class="fc" id="L114">                .fraudFlagged(false)</span>
+<span class="fc" id="L115">                .adminReviewStatus(AdminReviewStatus.NOT_REQUIRED)</span>
+<span class="fc" id="L116">                .build();</span>
+
+<span class="fc" id="L118">        transfer = transferRepository.save(transfer);</span>
+
+        // Debit sender wallet atomically
+<span class="fc" id="L121">        BigDecimal senderOldBalance = senderWallet.getBalance();</span>
+<span class="fc" id="L122">        BigDecimal senderNewBalance = senderOldBalance.subtract(amount);</span>
+<span class="fc" id="L123">        senderWallet.setBalance(senderNewBalance);</span>
+<span class="fc" id="L124">        senderWallet.setTodaySpending(todaySpending.add(amount));</span>
+
+        // Create sender DEBIT ledger entry
+<span class="fc" id="L127">        LedgerEntry senderLedgerEntry = LedgerEntry.builder()</span>
+<span class="fc" id="L128">                .transferId(transfer.getId())</span>
+<span class="fc" id="L129">                .userId(senderId)</span>
+<span class="fc" id="L130">                .type(LedgerType.DEBIT)</span>
+<span class="fc" id="L131">                .amount(amount)</span>
+<span class="fc" id="L132">                .balanceBefore(senderOldBalance)</span>
+<span class="fc" id="L133">                .balanceAfter(senderNewBalance)</span>
+<span class="fc" id="L134">                .createdAt(java.time.LocalDateTime.now())</span>
+<span class="fc" id="L135">                .build();</span>
+<span class="fc" id="L136">        ledgerEntryRepository.save(senderLedgerEntry);</span>
+
+<span class="fc" id="L138">        walletRepository.save(senderWallet);</span>
+
+        // Create fraud alert if amount exceeds threshold
+<span class="fc bfc" id="L141" title="All 2 branches covered.">        boolean shouldFlag = amount.compareTo(ADMIN_REVIEW_THRESHOLD) &gt; 0;</span>
+<span class="fc bfc" id="L142" title="All 2 branches covered.">        if (shouldFlag) {</span>
+<span class="fc" id="L143">            createFraudAlert(transfer, &quot;Transfer amount exceeds admin review threshold&quot;);</span>
+<span class="fc" id="L144">            transfer.setFraudFlagged(true);</span>
+<span class="fc" id="L145">            transfer.setAdminReviewStatus(AdminReviewStatus.PENDING);</span>
+<span class="fc" id="L146">            transferRepository.save(transfer);</span>
+            
+            // Notify all admins about the fraud alert
+<span class="fc" id="L149">            notifyAdminsAboutFraudAlert(transfer, sender);</span>
+        }
+
+        // Create notification for sender
+<span class="fc" id="L153">        createNotification(senderId, NotificationType.TRANSFER_INITIATED,</span>
+<span class="fc" id="L154">                &quot;Transfer of ₹&quot; + amount + &quot; initiated to &quot; + receiver.getName());</span>
+
+<span class="fc" id="L156">        return transfer;</span>
+    }
+
+    @Transactional
+    public Transfer settleTransfer(Long transferId) {
+<span class="fc" id="L161">        Transfer transfer = transferRepository.findById(transferId)</span>
+<span class="fc" id="L162">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Transfer not found&quot;));</span>
+
+<span class="fc bfc" id="L164" title="All 2 branches covered.">        if (transfer.getStatus() != TransferStatus.PENDING) {</span>
+<span class="fc" id="L165">            throw new IllegalArgumentException(&quot;Transfer is not in PENDING status&quot;);</span>
+        }
+
+        // Skip flagged transfers that require admin approval
+<span class="fc bfc" id="L169" title="All 2 branches covered.">        if (transfer.getAdminReviewStatus() == AdminReviewStatus.PENDING) {</span>
+<span class="fc" id="L170">            throw new IllegalArgumentException(&quot;Transfer requires admin approval before settlement&quot;);</span>
+        }
+
+        // Check if settlement date has arrived
+<span class="fc bfc" id="L174" title="All 2 branches covered.">        if (transfer.getSettlementDate().isAfter(LocalDateTime.now())) {</span>
+<span class="fc" id="L175">            throw new IllegalArgumentException(&quot;Transfer settlement date has not arrived&quot;);</span>
+        }
+
+<span class="fc" id="L178">        Wallet senderWallet = walletRepository.findByUserId(transfer.getSenderId())</span>
+<span class="fc" id="L179">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Sender wallet not found&quot;));</span>
+<span class="fc" id="L180">        Wallet receiverWallet = walletRepository.findByUserId(transfer.getReceiverId())</span>
+<span class="fc" id="L181">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Receiver wallet not found&quot;));</span>
+
+        // Check receiver wallet status before settlement
+<span class="fc bfc" id="L184" title="All 2 branches covered.">        if (receiverWallet.getStatus() != WalletStatus.ACTIVE) {</span>
+            // Receiver wallet is not active - mark transfer as FAILED
+<span class="fc" id="L186">            transfer.setStatus(TransferStatus.FAILED);</span>
+<span class="fc" id="L187">            transferRepository.save(transfer);</span>
+<span class="fc" id="L188">            createNotification(transfer.getSenderId(), NotificationType.FAILED,</span>
+<span class="fc" id="L189">                    &quot;Transfer settlement failed: receiver wallet not active&quot;);</span>
+<span class="fc" id="L190">            return transfer;</span>
+        }
+
+<span class="fc" id="L193">        BigDecimal amount = transfer.getAmount();</span>
+
+        // Credit receiver wallet
+<span class="fc" id="L196">        BigDecimal receiverOldBalance = receiverWallet.getBalance();</span>
+<span class="fc" id="L197">        BigDecimal receiverNewBalance = receiverOldBalance.add(amount);</span>
+<span class="fc" id="L198">        receiverWallet.setBalance(receiverNewBalance);</span>
+
+        // Create receiver CREDIT ledger entry
+<span class="fc" id="L201">        LedgerEntry receiverLedgerEntry = LedgerEntry.builder()</span>
+<span class="fc" id="L202">                .transferId(transfer.getId())</span>
+<span class="fc" id="L203">                .userId(transfer.getReceiverId())</span>
+<span class="fc" id="L204">                .type(LedgerType.CREDIT)</span>
+<span class="fc" id="L205">                .amount(amount)</span>
+<span class="fc" id="L206">                .balanceBefore(receiverOldBalance)</span>
+<span class="fc" id="L207">                .balanceAfter(receiverNewBalance)</span>
+<span class="fc" id="L208">                .createdAt(java.time.LocalDateTime.now())</span>
+<span class="fc" id="L209">                .build();</span>
+<span class="fc" id="L210">        ledgerEntryRepository.save(receiverLedgerEntry);</span>
+
+<span class="fc" id="L212">        walletRepository.save(receiverWallet);</span>
+
+        // Update transfer status to SUCCESS
+<span class="fc" id="L215">        transfer.setStatus(TransferStatus.SUCCESS);</span>
+<span class="fc" id="L216">        transferRepository.save(transfer);</span>
+
+        // Create notification to both sender and receiver
+<span class="fc" id="L219">        User sender = userRepository.findById(transfer.getSenderId()).orElse(null);</span>
+<span class="fc" id="L220">        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(null);</span>
+<span class="fc bfc" id="L221" title="All 2 branches covered.">        String senderName = sender != null ? sender.getName() : &quot;User #&quot; + transfer.getSenderId();</span>
+<span class="fc bfc" id="L222" title="All 2 branches covered.">        String receiverName = receiver != null ? receiver.getName() : &quot;User #&quot; + transfer.getReceiverId();</span>
+        
+<span class="fc" id="L224">        System.out.println(&quot;DEBUG: Creating settlement notifications (TransferService) for transfer ID: &quot; + transfer.getId());</span>
+        
+<span class="fc" id="L226">        createNotification(transfer.getSenderId(), NotificationType.SETTLEMENT,</span>
+<span class="fc" id="L227">                &quot;₹&quot; + amount + &quot; transfer to &quot; + receiverName + &quot; has been settled&quot;);</span>
+<span class="fc" id="L228">        createNotification(transfer.getReceiverId(), NotificationType.SETTLEMENT,</span>
+<span class="fc" id="L229">                &quot;₹&quot; + amount + &quot; received from &quot; + senderName);</span>
+
+<span class="fc" id="L231">        return transfer;</span>
+    }
+
+    @Transactional
+    public Transfer refundTransfer(Long transferId) {
+<span class="fc" id="L236">        Transfer transfer = transferRepository.findById(transferId)</span>
+<span class="fc" id="L237">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Transfer not found&quot;));</span>
+
+<span class="fc bfc" id="L239" title="All 2 branches covered.">        if (transfer.getAdminReviewStatus() != AdminReviewStatus.PENDING) {</span>
+<span class="fc" id="L240">            throw new IllegalArgumentException(&quot;Transfer is not pending admin review&quot;);</span>
+        }
+
+        // Check if already refunded (idempotency)
+<span class="pc bpc" id="L244" title="1 of 2 branches missed.">        if (transfer.getAdminReviewStatus() == AdminReviewStatus.REFUNDED) {</span>
+<span class="nc" id="L245">            return transfer;</span>
+        }
+
+<span class="fc" id="L248">        Wallet senderWallet = walletRepository.findByUserId(transfer.getSenderId())</span>
+<span class="fc" id="L249">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Sender wallet not found&quot;));</span>
+
+<span class="fc" id="L251">        BigDecimal amount = transfer.getAmount();</span>
+
+        // Credit sender wallet (refund)
+<span class="fc" id="L254">        BigDecimal senderOldBalance = senderWallet.getBalance();</span>
+<span class="fc" id="L255">        BigDecimal senderNewBalance = senderOldBalance.add(amount);</span>
+<span class="fc" id="L256">        senderWallet.setBalance(senderNewBalance);</span>
+
+        // Decrease todaySpending for refund
+<span class="fc" id="L259">        BigDecimal newTodaySpending = senderWallet.getTodaySpending().subtract(amount);</span>
+<span class="fc bfc" id="L260" title="All 2 branches covered.">        if (newTodaySpending.compareTo(BigDecimal.ZERO) &lt; 0) {</span>
+<span class="fc" id="L261">            newTodaySpending = BigDecimal.ZERO;</span>
+        }
+<span class="fc" id="L263">        senderWallet.setTodaySpending(newTodaySpending);</span>
+
+        // Create sender CREDIT (refund) ledger entry
+<span class="fc" id="L266">        LedgerEntry refundLedgerEntry = LedgerEntry.builder()</span>
+<span class="fc" id="L267">                .transferId(transfer.getId())</span>
+<span class="fc" id="L268">                .userId(transfer.getSenderId())</span>
+<span class="fc" id="L269">                .type(LedgerType.CREDIT)</span>
+<span class="fc" id="L270">                .amount(amount)</span>
+<span class="fc" id="L271">                .balanceBefore(senderOldBalance)</span>
+<span class="fc" id="L272">                .balanceAfter(senderNewBalance)</span>
+<span class="fc" id="L273">                .createdAt(java.time.LocalDateTime.now())</span>
+<span class="fc" id="L274">                .build();</span>
+<span class="fc" id="L275">        ledgerEntryRepository.save(refundLedgerEntry);</span>
+
+<span class="fc" id="L277">        walletRepository.save(senderWallet);</span>
+
+        // Update transfer status
+<span class="fc" id="L280">        transfer.setStatus(TransferStatus.DECLINED);</span>
+<span class="fc" id="L281">        transfer.setAdminReviewStatus(AdminReviewStatus.REFUNDED);</span>
+<span class="fc" id="L282">        transferRepository.save(transfer);</span>
+
+        // Update fraud alert
+<span class="fc" id="L285">        FraudAlert fraudAlert = fraudAlertRepository.findByTransferId(transferId)</span>
+<span class="fc" id="L286">                .orElse(null);</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">        if (fraudAlert != null) {</span>
+<span class="fc" id="L288">            fraudAlert.setStatus(FraudStatus.RESOLVED);</span>
+<span class="fc" id="L289">            fraudAlert.setReviewedAt(LocalDateTime.now());</span>
+<span class="fc" id="L290">            fraudAlertRepository.save(fraudAlert);</span>
+        }
+
+        // Create notification only for sender (receiver doesn't need to know about failed transfers)
+<span class="fc" id="L294">        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(null);</span>
+<span class="fc bfc" id="L295" title="All 2 branches covered.">        String receiverName = receiver != null ? receiver.getName() : &quot;User #&quot; + transfer.getReceiverId();</span>
+        
+<span class="fc" id="L297">        createNotification(transfer.getSenderId(), NotificationType.REFUND,</span>
+<span class="fc" id="L298">                &quot;₹&quot; + amount + &quot; transfer to &quot; + receiverName + &quot; failed. Amount refunded to your wallet&quot;);</span>
+
+<span class="fc" id="L300">        return transfer;</span>
+    }
+
+    public Page&lt;TransferHistoryDto&gt; getTransactionHistory(Long userId, Integer page, Integer size,
+                                                           String type, String status, LocalDateTime startDate, LocalDateTime endDate) {
+        // Note: We fetch ALL matching records and filter in-memory because:
+        // 1. Type (DEBIT/CREDIT) is perspective-based - can't filter in DB
+        // 2. Receivers shouldn't see PENDING/DECLINED incoming transfers
+        // This is acceptable for reasonable data sizes
+        
+        // Build unpaged query to get all matching transfers
+        List&lt;Transfer&gt; allTransfers;
+        
+<span class="fc bfc" id="L313" title="All 4 branches covered.">        if (startDate != null &amp;&amp; endDate != null) {</span>
+<span class="fc" id="L314">            allTransfers = transferRepository.findByUserIdAndCreatedAtBetweenUnpaged(userId, startDate, endDate);</span>
+<span class="fc bfc" id="L315" title="All 2 branches covered.">        } else if (startDate != null) {</span>
+<span class="fc" id="L316">            allTransfers = transferRepository.findByUserIdAndCreatedAtAfterUnpaged(userId, startDate);</span>
+<span class="fc bfc" id="L317" title="All 2 branches covered.">        } else if (endDate != null) {</span>
+<span class="fc" id="L318">            allTransfers = transferRepository.findByUserIdAndCreatedAtBeforeUnpaged(userId, endDate);</span>
+<span class="fc" id="L319">        } else {</span>
+<span class="fc" id="L320">            allTransfers = transferRepository.findByUserIdUnpaged(userId);</span>
+        }
+        
+        // Get masking preference for this user
+<span class="fc" id="L324">        User user = userRepository.findById(userId)</span>
+<span class="fc" id="L325">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;User not found&quot;));</span>
+<span class="fc" id="L326">        boolean maskingEnabled = user.isMaskingEnabled();</span>
+        
+        // Map and filter transfers to DTOs
+<span class="fc" id="L329">        List&lt;TransferHistoryDto&gt; allDtos = allTransfers.stream()</span>
+<span class="fc" id="L330">                .map(transfer -&gt; {</span>
+<span class="fc" id="L331">                    User sender = userRepository.findById(transfer.getSenderId()).orElse(new User());</span>
+<span class="fc" id="L332">                    User receiver = userRepository.findById(transfer.getReceiverId()).orElse(new User());</span>
+                    
+                    // Determine type from the perspective of userId
+<span class="fc bfc" id="L335" title="All 2 branches covered.">                    String transferType = transfer.getSenderId().equals(userId) ? &quot;DEBIT&quot; : &quot;CREDIT&quot;;</span>
+                    
+                    // IMPORTANT: Receiver should NOT see PENDING or DECLINED transfers
+<span class="fc bfc" id="L338" title="All 2 branches covered.">                    if (transferType.equals(&quot;CREDIT&quot;) &amp;&amp; </span>
+<span class="fc bfc" id="L339" title="All 4 branches covered.">                        (transfer.getStatus() == TransferStatus.PENDING || transfer.getStatus() == TransferStatus.DECLINED)) {</span>
+<span class="fc" id="L340">                        return null;</span>
+                    }
+                    
+                    // Apply type filter
+<span class="fc bfc" id="L344" title="All 6 branches covered.">                    if (type != null &amp;&amp; !type.isEmpty() &amp;&amp; !type.equalsIgnoreCase(transferType)) {</span>
+<span class="fc" id="L345">                        return null;</span>
+                    }
+                    
+                    // Apply status filter
+<span class="fc bfc" id="L349" title="All 6 branches covered.">                    if (status != null &amp;&amp; !status.isEmpty() &amp;&amp; !status.equalsIgnoreCase(transfer.getStatus().name())) {</span>
+<span class="fc" id="L350">                        return null;</span>
+                    }
+
+<span class="fc" id="L353">                    return TransferHistoryDto.builder()</span>
+<span class="fc" id="L354">                            .id(transfer.getId())</span>
+<span class="fc" id="L355">                            .amount(transfer.getAmount())</span>
+<span class="fc" id="L356">                            .requestId(transfer.getRequestId())</span>
+<span class="fc" id="L357">                            .type(transferType)</span>
+<span class="fc" id="L358">                            .status(transfer.getStatus())</span>
+<span class="fc" id="L359">                            .createdAt(transfer.getCreatedAt())</span>
+<span class="fc" id="L360">                            .settlementDate(transfer.getSettlementDate())</span>
+<span class="fc" id="L361">                            .fraudFlagged(transfer.isFraudFlagged())</span>
+<span class="fc" id="L362">                            .adminReviewStatus(transfer.getAdminReviewStatus())</span>
+<span class="fc bfc" id="L363" title="All 2 branches covered.">                            .senderName(maskingEnabled ? null : sender.getName())</span>
+<span class="fc bfc" id="L364" title="All 2 branches covered.">                            .senderEmail(maskingEnabled ? null : sender.getEmail())</span>
+<span class="fc bfc" id="L365" title="All 2 branches covered.">                            .senderPhone(maskingEnabled ? null : sender.getPhone())</span>
+<span class="fc bfc" id="L366" title="All 2 branches covered.">                            .receiverName(maskingEnabled ? null : receiver.getName())</span>
+<span class="fc bfc" id="L367" title="All 2 branches covered.">                            .receiverEmail(maskingEnabled ? null : receiver.getEmail())</span>
+<span class="fc bfc" id="L368" title="All 2 branches covered.">                            .receiverPhone(maskingEnabled ? null : receiver.getPhone())</span>
+<span class="fc" id="L369">                            .daysUntilSettlement(calculateDaysUntilSettlement(transfer.getSettlementDate()))</span>
+<span class="fc" id="L370">                            .build();</span>
+                })
+<span class="fc bfc" id="L372" title="All 2 branches covered.">                .filter(dto -&gt; dto != null)</span>
+<span class="fc" id="L373">                .collect(java.util.stream.Collectors.toList());</span>
+        
+        // Now apply manual pagination
+<span class="fc" id="L376">        int totalElements = allDtos.size();</span>
+<span class="fc" id="L377">        int totalPages = (int) Math.ceil((double) totalElements / size);</span>
+<span class="fc" id="L378">        int start = page * size;</span>
+<span class="fc" id="L379">        int end = Math.min(start + size, totalElements);</span>
+        
+<span class="fc bfc" id="L381" title="All 2 branches covered.">        List&lt;TransferHistoryDto&gt; pageContent = start &lt; totalElements </span>
+<span class="fc" id="L382">                ? allDtos.subList(start, end) </span>
+<span class="fc" id="L383">                : java.util.Collections.emptyList();</span>
+        
+<span class="fc" id="L385">        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size);</span>
+<span class="fc" id="L386">        return new org.springframework.data.domain.PageImpl&lt;&gt;(pageContent, pageable, totalElements);</span>
+    }
+
+    public Transfer getTransferById(Long id) {
+<span class="fc" id="L390">        return transferRepository.findById(id)</span>
+<span class="fc" id="L391">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Transfer not found&quot;));</span>
+    }
+    
+    public TransferDetailDto getTransferDetail(Long id, Long requestingUserId) {
+<span class="fc" id="L395">        Transfer transfer = transferRepository.findById(id)</span>
+<span class="fc" id="L396">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Transfer not found&quot;));</span>
+        
+        // Get user's masking preference and role
+<span class="fc" id="L399">        User user = userRepository.findById(requestingUserId)</span>
+<span class="fc" id="L400">                .orElse(new User());</span>
+<span class="fc" id="L401">        boolean maskingEnabled = user.isMaskingEnabled();</span>
+<span class="fc bfc" id="L402" title="All 2 branches covered.">        boolean isAdmin = user.getRole() == Role.ADMIN;</span>
+        
+        // Check authorization - Admin can access any transfer, regular users only their own
+<span class="fc bfc" id="L405" title="All 4 branches covered.">        if (!isAdmin &amp;&amp; !transfer.getSenderId().equals(requestingUserId) &amp;&amp; </span>
+<span class="fc bfc" id="L406" title="All 2 branches covered.">            !transfer.getReceiverId().equals(requestingUserId)) {</span>
+<span class="fc" id="L407">            throw new IllegalArgumentException(&quot;Access denied&quot;);</span>
+        }
+        
+        // Get ledger entries for this transfer
+<span class="fc" id="L411">        List&lt;LedgerEntry&gt; ledgerEntries = ledgerEntryRepository.findByTransferId(id);</span>
+        
+        // Get sender and receiver details
+<span class="fc" id="L414">        User sender = userRepository.findById(transfer.getSenderId()).orElse(new User());</span>
+<span class="fc" id="L415">        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(new User());</span>
+        
+        // Build DTO with conditional masking (admin masking preference still applies)
+<span class="fc bfc" id="L418" title="All 2 branches covered.">        String senderName = maskingEnabled ? null : sender.getName();</span>
+<span class="fc bfc" id="L419" title="All 2 branches covered.">        String senderEmail = maskingEnabled ? null : sender.getEmail();</span>
+<span class="fc bfc" id="L420" title="All 2 branches covered.">        String senderPhone = maskingEnabled ? null : sender.getPhone();</span>
+<span class="fc bfc" id="L421" title="All 2 branches covered.">        String receiverName = maskingEnabled ? null : receiver.getName();</span>
+<span class="fc bfc" id="L422" title="All 2 branches covered.">        String receiverEmail = maskingEnabled ? null : receiver.getEmail();</span>
+<span class="fc bfc" id="L423" title="All 2 branches covered.">        String receiverPhone = maskingEnabled ? null : receiver.getPhone();</span>
+        
+        // Filter ledger entries based on user role
+        // Admin can see both sides, regular users can only see their own ledger entry
+<span class="fc" id="L427">        List&lt;LedgerEntryDto&gt; ledgerDtos = ledgerEntries.stream()</span>
+<span class="fc bfc" id="L428" title="All 4 branches covered.">                .filter(entry -&gt; isAdmin || entry.getUserId().equals(requestingUserId))</span>
+<span class="fc" id="L429">                .map(entry -&gt; new LedgerEntryDto(</span>
+<span class="fc" id="L430">                    entry.getId(),</span>
+<span class="fc" id="L431">                    entry.getTransferId(),</span>
+<span class="fc" id="L432">                    entry.getUserId(),</span>
+<span class="fc" id="L433">                    entry.getType().name(),</span>
+<span class="fc" id="L434">                    entry.getAmount(),</span>
+<span class="fc" id="L435">                    entry.getBalanceBefore(),</span>
+<span class="fc" id="L436">                    entry.getBalanceAfter(),</span>
+<span class="fc" id="L437">                    entry.getCreatedAt()</span>
+<span class="fc" id="L438">                ))</span>
+<span class="fc" id="L439">                .collect(java.util.stream.Collectors.toList());</span>
+        
+<span class="fc" id="L441">        return TransferDetailDto.builder()</span>
+<span class="fc" id="L442">                .id(transfer.getId())</span>
+<span class="fc" id="L443">                .senderId(transfer.getSenderId())</span>
+<span class="fc" id="L444">                .receiverId(transfer.getReceiverId())</span>
+<span class="fc" id="L445">                .amount(transfer.getAmount())</span>
+<span class="fc" id="L446">                .requestId(transfer.getRequestId())</span>
+<span class="fc" id="L447">                .status(transfer.getStatus().name())</span>
+<span class="fc" id="L448">                .createdAt(transfer.getCreatedAt())</span>
+<span class="fc" id="L449">                .settlementDate(transfer.getSettlementDate())</span>
+<span class="fc" id="L450">                .fraudFlagged(transfer.isFraudFlagged())</span>
+<span class="fc bfc" id="L451" title="All 2 branches covered.">                .adminReviewStatus(transfer.getAdminReviewStatus() != null ? transfer.getAdminReviewStatus().name() : null)</span>
+<span class="fc" id="L452">                .senderName(senderName)</span>
+<span class="fc" id="L453">                .senderEmail(senderEmail)</span>
+<span class="fc" id="L454">                .senderPhone(senderPhone)</span>
+<span class="fc" id="L455">                .receiverName(receiverName)</span>
+<span class="fc" id="L456">                .receiverEmail(receiverEmail)</span>
+<span class="fc" id="L457">                .receiverPhone(receiverPhone)</span>
+<span class="fc" id="L458">                .ledgerEntries(ledgerDtos)</span>
+<span class="fc" id="L459">                .build();</span>
+    }
+
+    private int calculateDaysUntilSettlement(LocalDateTime settlementDate) {
+<span class="fc bfc" id="L463" title="All 2 branches covered.">        if (settlementDate == null) return 0;</span>
+<span class="fc" id="L464">        LocalDateTime now = LocalDateTime.now();</span>
+<span class="fc bfc" id="L465" title="All 2 branches covered.">        if (settlementDate.isBefore(now)) return 0;</span>
+<span class="fc" id="L466">        return (int) java.time.Duration.between(now, settlementDate).toDays();</span>
+    }
+
+    public TransferSummary getTransferSummary(Long userId) {
+<span class="fc" id="L470">        List&lt;Transfer&gt; sentTransfers = transferRepository.findBySenderId(userId);</span>
+<span class="fc" id="L471">        List&lt;Transfer&gt; receivedTransfers = transferRepository.findByReceiverId(userId);</span>
+
+<span class="fc" id="L473">        BigDecimal totalSent = sentTransfers.stream()</span>
+<span class="fc bfc" id="L474" title="All 2 branches covered.">                .filter(t -&gt; t.getStatus() == TransferStatus.SUCCESS)</span>
+<span class="fc" id="L475">                .map(Transfer::getAmount)</span>
+<span class="fc" id="L476">                .reduce(BigDecimal.ZERO, BigDecimal::add);</span>
+
+<span class="fc" id="L478">        BigDecimal totalReceived = receivedTransfers.stream()</span>
+<span class="pc bpc" id="L479" title="1 of 2 branches missed.">                .filter(t -&gt; t.getStatus() == TransferStatus.SUCCESS)</span>
+<span class="fc" id="L480">                .map(Transfer::getAmount)</span>
+<span class="fc" id="L481">                .reduce(BigDecimal.ZERO, BigDecimal::add);</span>
+
+<span class="fc" id="L483">        long monthlyCount = sentTransfers.stream()</span>
+<span class="fc" id="L484">                .filter(t -&gt; t.getCreatedAt().isAfter(LocalDateTime.now().minusMonths(1)))</span>
+<span class="fc" id="L485">                .count();</span>
+
+<span class="fc" id="L487">        return TransferSummary.builder()</span>
+<span class="fc" id="L488">                .totalSent(totalSent)</span>
+<span class="fc" id="L489">                .totalReceived(totalReceived)</span>
+<span class="fc" id="L490">                .monthlyCount(monthlyCount)</span>
+<span class="fc" id="L491">                .build();</span>
+    }
+
+    private boolean isSuspectedDuplicate(Long senderId, Long receiverId, BigDecimal amount) {
+<span class="fc" id="L495">        LocalDateTime twoMinutesAgo = LocalDateTime.now().minusMinutes(2);</span>
+<span class="fc bfc" id="L496" title="All 2 branches covered.">        return transferRepository.findBySenderIdAndReceiverIdAndAmountAndCreatedAtAfter(</span>
+<span class="fc" id="L497">                senderId, receiverId, amount, twoMinutesAgo).size() &gt; 0;</span>
+    }
+
+    private void createFraudAlert(Transfer transfer, String reason) {
+<span class="fc" id="L501">        FraudAlert alert = FraudAlert.builder()</span>
+<span class="fc" id="L502">                .transferId(transfer.getId())</span>
+<span class="fc" id="L503">                .reason(reason)</span>
+<span class="fc" id="L504">                .status(FraudStatus.OPEN)</span>
+<span class="fc" id="L505">                .createdAt(LocalDateTime.now())</span>
+<span class="fc" id="L506">                .build();</span>
+<span class="fc" id="L507">        fraudAlertRepository.save(alert);</span>
+<span class="fc" id="L508">    }</span>
+    
+    private void notifyAdminsAboutFraudAlert(Transfer transfer, User sender) {
+        // Get all admin users
+<span class="fc" id="L512">        List&lt;User&gt; admins = userRepository.findAll().stream()</span>
+<span class="pc bpc" id="L513" title="1 of 2 branches missed.">                .filter(u -&gt; u.getRole() == Role.ADMIN)</span>
+<span class="fc" id="L514">                .collect(java.util.stream.Collectors.toList());</span>
+        
+        // Send notification to each admin
+<span class="fc bfc" id="L517" title="All 2 branches covered.">        for (User admin : admins) {</span>
+<span class="fc" id="L518">            createNotification(admin.getId(), NotificationType.FRAUD_ALERT,</span>
+<span class="fc" id="L519">                    &quot;High-value transaction flagged: ₹&quot; + transfer.getAmount() + </span>
+<span class="fc" id="L520">                    &quot; by User #&quot; + sender.getId() + &quot; (&quot; + sender.getName() + &quot;)&quot;);</span>
+        }
+<span class="fc" id="L522">    }</span>
+
+    private void createNotification(Long userId, NotificationType type, String message) {
+<span class="fc" id="L525">        Notification notification = Notification.builder()</span>
+<span class="fc" id="L526">                .userId(userId)</span>
+<span class="fc" id="L527">                .type(type)</span>
+<span class="fc" id="L528">                .message(message)</span>
+<span class="fc" id="L529">                .isRead(false)</span>
+<span class="fc" id="L530">                .createdAt(LocalDateTime.now())</span>
+<span class="fc" id="L531">                .build();</span>
+<span class="fc" id="L532">        notificationRepository.save(notification);</span>
+<span class="fc" id="L533">    }</span>
+
+    private void createAuditLog(Long actorUserId, String action, String entityType, String entityId, String details) {
+<span class="nc" id="L536">        AuditLog auditLog = AuditLog.builder()</span>
+<span class="nc" id="L537">                .actorUserId(actorUserId)</span>
+<span class="nc" id="L538">                .action(action)</span>
+<span class="nc" id="L539">                .entityType(entityType)</span>
+<span class="nc" id="L540">                .entityId(entityId)</span>
+<span class="nc" id="L541">                .details(details)</span>
+<span class="nc" id="L542">                .createdAt(LocalDateTime.now())</span>
+<span class="nc" id="L543">                .build();</span>
+<span class="nc" id="L544">        auditLogRepository.save(auditLog);</span>
+<span class="nc" id="L545">    }</span>
+
+    private LocalDateTime calculateSettlementDate() {
+        // Calculate three business days (excluding weekends)
+<span class="fc" id="L549">        LocalDateTime now = LocalDateTime.now();</span>
+<span class="fc" id="L550">        LocalDateTime result = now;</span>
+<span class="fc" id="L551">        int businessDays = 0;</span>
+        
+<span class="fc bfc" id="L553" title="All 2 branches covered.">        while (businessDays &lt; 3) {</span>
+<span class="fc" id="L554">            result = result.plusDays(1);</span>
+<span class="fc" id="L555">            DayOfWeek day = result.getDayOfWeek();</span>
+<span class="pc bpc" id="L556" title="2 of 4 branches missed.">            if (day != DayOfWeek.SATURDAY &amp;&amp; day != DayOfWeek.SUNDAY) {</span>
+<span class="fc" id="L557">                businessDays++;</span>
+            }
+        }
+        
+<span class="fc" id="L561">        return result;</span>
+    }
+
+    public static class TransferHistoryDto {
+        private final Long id;
+        private final BigDecimal amount;
+        private final String requestId;
+        private final String type;  // &quot;DEBIT&quot; or &quot;CREDIT&quot; from caller's perspective
+        private final TransferStatus status;
+        private final LocalDateTime createdAt;
+        private final LocalDateTime settlementDate;
+        private final boolean fraudFlagged;
+        private final AdminReviewStatus adminReviewStatus;
+        // Counterparty details (masked if user's masking preference is enabled)
+        private final String senderName;
+        private final String senderEmail;
+        private final String senderPhone;
+        private final String receiverName;
+        private final String receiverEmail;
+        private final String receiverPhone;
+        private final int daysUntilSettlement;
+
+<span class="fc" id="L583">        public TransferHistoryDto() {</span>
+<span class="fc" id="L584">            this.id = null;</span>
+<span class="fc" id="L585">            this.amount = null;</span>
+<span class="fc" id="L586">            this.requestId = null;</span>
+<span class="fc" id="L587">            this.type = null;</span>
+<span class="fc" id="L588">            this.status = null;</span>
+<span class="fc" id="L589">            this.createdAt = null;</span>
+<span class="fc" id="L590">            this.settlementDate = null;</span>
+<span class="fc" id="L591">            this.fraudFlagged = false;</span>
+<span class="fc" id="L592">            this.adminReviewStatus = null;</span>
+<span class="fc" id="L593">            this.senderName = null;</span>
+<span class="fc" id="L594">            this.senderEmail = null;</span>
+<span class="fc" id="L595">            this.senderPhone = null;</span>
+<span class="fc" id="L596">            this.receiverName = null;</span>
+<span class="fc" id="L597">            this.receiverEmail = null;</span>
+<span class="fc" id="L598">            this.receiverPhone = null;</span>
+<span class="fc" id="L599">            this.daysUntilSettlement = 0;</span>
+<span class="fc" id="L600">        }</span>
+
+<span class="fc" id="L602">        public TransferHistoryDto(Long id, BigDecimal amount, String requestId, String type, TransferStatus status, LocalDateTime createdAt, LocalDateTime settlementDate,</span>
+                                   boolean fraudFlagged, AdminReviewStatus adminReviewStatus, String senderName, String senderEmail, String senderPhone,
+                                   String receiverName, String receiverEmail, String receiverPhone, int daysUntilSettlement) {
+<span class="fc" id="L605">            this.id = id;</span>
+<span class="fc" id="L606">            this.amount = amount;</span>
+<span class="fc" id="L607">            this.requestId = requestId;</span>
+<span class="fc" id="L608">            this.type = type;</span>
+<span class="fc" id="L609">            this.status = status;</span>
+<span class="fc" id="L610">            this.createdAt = createdAt;</span>
+<span class="fc" id="L611">            this.settlementDate = settlementDate;</span>
+<span class="fc" id="L612">            this.fraudFlagged = fraudFlagged;</span>
+<span class="fc" id="L613">            this.adminReviewStatus = adminReviewStatus;</span>
+<span class="fc" id="L614">            this.senderName = senderName;</span>
+<span class="fc" id="L615">            this.senderEmail = senderEmail;</span>
+<span class="fc" id="L616">            this.senderPhone = senderPhone;</span>
+<span class="fc" id="L617">            this.receiverName = receiverName;</span>
+<span class="fc" id="L618">            this.receiverEmail = receiverEmail;</span>
+<span class="fc" id="L619">            this.receiverPhone = receiverPhone;</span>
+<span class="fc" id="L620">            this.daysUntilSettlement = daysUntilSettlement;</span>
+<span class="fc" id="L621">        }</span>
+
+        public static Builder builder() {
+<span class="fc" id="L624">            return new Builder();</span>
+        }
+
+<span class="fc" id="L627">        public Long getId() { return id; }</span>
+<span class="fc" id="L628">        public BigDecimal getAmount() { return amount; }</span>
+<span class="fc" id="L629">        public String getRequestId() { return requestId; }</span>
+<span class="fc" id="L630">        public String getType() { return type; }</span>
+<span class="fc" id="L631">        public TransferStatus getStatus() { return status; }</span>
+<span class="fc" id="L632">        public LocalDateTime getCreatedAt() { return createdAt; }</span>
+<span class="fc" id="L633">        public LocalDateTime getSettlementDate() { return settlementDate; }</span>
+<span class="fc" id="L634">        public boolean isFraudFlagged() { return fraudFlagged; }</span>
+<span class="fc" id="L635">        public AdminReviewStatus getAdminReviewStatus() { return adminReviewStatus; }</span>
+<span class="fc" id="L636">        public String getSenderName() { return senderName; }</span>
+<span class="fc" id="L637">        public String getSenderEmail() { return senderEmail; }</span>
+<span class="fc" id="L638">        public String getSenderPhone() { return senderPhone; }</span>
+<span class="fc" id="L639">        public String getReceiverName() { return receiverName; }</span>
+<span class="fc" id="L640">        public String getReceiverEmail() { return receiverEmail; }</span>
+<span class="fc" id="L641">        public String getReceiverPhone() { return receiverPhone; }</span>
+<span class="fc" id="L642">        public int getDaysUntilSettlement() { return daysUntilSettlement; }</span>
+
+<span class="fc" id="L644">        public static class Builder {</span>
+            private Long id;
+            private BigDecimal amount;
+            private String requestId;
+            private String type;
+            private TransferStatus status;
+            private LocalDateTime createdAt;
+            private LocalDateTime settlementDate;
+            private boolean fraudFlagged;
+            private AdminReviewStatus adminReviewStatus;
+            private String senderName;
+            private String senderEmail;
+            private String senderPhone;
+            private String receiverName;
+            private String receiverEmail;
+            private String receiverPhone;
+            private int daysUntilSettlement;
+
+<span class="fc" id="L662">            public Builder id(Long id) { this.id = id; return this; }</span>
+<span class="fc" id="L663">            public Builder amount(BigDecimal amount) { this.amount = amount; return this; }</span>
+<span class="fc" id="L664">            public Builder requestId(String requestId) { this.requestId = requestId; return this; }</span>
+<span class="fc" id="L665">            public Builder type(String type) { this.type = type; return this; }</span>
+<span class="fc" id="L666">            public Builder status(TransferStatus status) { this.status = status; return this; }</span>
+<span class="fc" id="L667">            public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }</span>
+<span class="fc" id="L668">            public Builder settlementDate(LocalDateTime settlementDate) { this.settlementDate = settlementDate; return this; }</span>
+<span class="fc" id="L669">            public Builder fraudFlagged(boolean fraudFlagged) { this.fraudFlagged = fraudFlagged; return this; }</span>
+<span class="fc" id="L670">            public Builder adminReviewStatus(AdminReviewStatus adminReviewStatus) { this.adminReviewStatus = adminReviewStatus; return this; }</span>
+<span class="fc" id="L671">            public Builder senderName(String senderName) { this.senderName = senderName; return this; }</span>
+<span class="fc" id="L672">            public Builder senderEmail(String senderEmail) { this.senderEmail = senderEmail; return this; }</span>
+<span class="fc" id="L673">            public Builder senderPhone(String senderPhone) { this.senderPhone = senderPhone; return this; }</span>
+<span class="fc" id="L674">            public Builder receiverName(String receiverName) { this.receiverName = receiverName; return this; }</span>
+<span class="fc" id="L675">            public Builder receiverEmail(String receiverEmail) { this.receiverEmail = receiverEmail; return this; }</span>
+<span class="fc" id="L676">            public Builder receiverPhone(String receiverPhone) { this.receiverPhone = receiverPhone; return this; }</span>
+<span class="fc" id="L677">            public Builder daysUntilSettlement(int daysUntilSettlement) { this.daysUntilSettlement = daysUntilSettlement; return this; }</span>
+
+            public TransferHistoryDto build() {
+<span class="fc" id="L680">                return new TransferHistoryDto(id, amount, requestId, type, status, createdAt, settlementDate, fraudFlagged, adminReviewStatus,</span>
+<span class="fc" id="L681">                        senderName, senderEmail, senderPhone, receiverName, receiverEmail, receiverPhone, daysUntilSettlement);</span>
+            }
+        }
+    }
+
+    // Response DTOs
+    public static class TransferSummary {
+        private final BigDecimal totalSent;
+        private final BigDecimal totalReceived;
+        private final long monthlyCount;
+
+<span class="fc" id="L692">        public TransferSummary(BigDecimal totalSent, BigDecimal totalReceived, long monthlyCount) {</span>
+<span class="fc" id="L693">            this.totalSent = totalSent;</span>
+<span class="fc" id="L694">            this.totalReceived = totalReceived;</span>
+<span class="fc" id="L695">            this.monthlyCount = monthlyCount;</span>
+<span class="fc" id="L696">        }</span>
+
+<span class="fc" id="L698">        public BigDecimal getTotalSent() { return totalSent; }</span>
+<span class="fc" id="L699">        public BigDecimal getTotalReceived() { return totalReceived; }</span>
+<span class="fc" id="L700">        public long getMonthlyCount() { return monthlyCount; }</span>
+
+        public static Builder builder() {
+<span class="fc" id="L703">            return new Builder();</span>
+        }
+
+<span class="fc" id="L706">        public static class Builder {</span>
+            private BigDecimal totalSent;
+            private BigDecimal totalReceived;
+            private long monthlyCount;
+
+            public Builder totalSent(BigDecimal totalSent) {
+<span class="fc" id="L712">                this.totalSent = totalSent;</span>
+<span class="fc" id="L713">                return this;</span>
+            }
+
+            public Builder totalReceived(BigDecimal totalReceived) {
+<span class="fc" id="L717">                this.totalReceived = totalReceived;</span>
+<span class="fc" id="L718">                return this;</span>
+            }
+
+            public Builder monthlyCount(long monthlyCount) {
+<span class="fc" id="L722">                this.monthlyCount = monthlyCount;</span>
+<span class="fc" id="L723">                return this;</span>
+            }
+
+            public TransferSummary build() {
+<span class="fc" id="L727">                return new TransferSummary(totalSent, totalReceived, monthlyCount);</span>
+            }
+        }
+    }
+    
+    // Transfer Detail DTO with Ledger Entries
+    public static class TransferDetailDto {
+        private final Long id;
+        private final Long senderId;
+        private final Long receiverId;
+        private final BigDecimal amount;
+        private final String requestId;
+        private final String status;
+        private final LocalDateTime createdAt;
+        private final LocalDateTime settlementDate;
+        private final Boolean fraudFlagged;
+        private final String adminReviewStatus;
+        private final String senderName;
+        private final String senderEmail;
+        private final String senderPhone;
+        private final String receiverName;
+        private final String receiverEmail;
+        private final String receiverPhone;
+        private final List&lt;LedgerEntryDto&gt; ledgerEntries;
+        
+<span class="fc" id="L752">        public TransferDetailDto(Long id, Long senderId, Long receiverId, BigDecimal amount, String requestId,</span>
+                               String status, LocalDateTime createdAt, LocalDateTime settlementDate,
+                               Boolean fraudFlagged, String adminReviewStatus, String senderName, String senderEmail,
+                               String senderPhone, String receiverName, String receiverEmail, String receiverPhone,
+                               List&lt;LedgerEntryDto&gt; ledgerEntries) {
+<span class="fc" id="L757">            this.id = id;</span>
+<span class="fc" id="L758">            this.senderId = senderId;</span>
+<span class="fc" id="L759">            this.receiverId = receiverId;</span>
+<span class="fc" id="L760">            this.amount = amount;</span>
+<span class="fc" id="L761">            this.requestId = requestId;</span>
+<span class="fc" id="L762">            this.status = status;</span>
+<span class="fc" id="L763">            this.createdAt = createdAt;</span>
+<span class="fc" id="L764">            this.settlementDate = settlementDate;</span>
+<span class="fc" id="L765">            this.fraudFlagged = fraudFlagged;</span>
+<span class="fc" id="L766">            this.adminReviewStatus = adminReviewStatus;</span>
+<span class="fc" id="L767">            this.senderName = senderName;</span>
+<span class="fc" id="L768">            this.senderEmail = senderEmail;</span>
+<span class="fc" id="L769">            this.senderPhone = senderPhone;</span>
+<span class="fc" id="L770">            this.receiverName = receiverName;</span>
+<span class="fc" id="L771">            this.receiverEmail = receiverEmail;</span>
+<span class="fc" id="L772">            this.receiverPhone = receiverPhone;</span>
+<span class="fc" id="L773">            this.ledgerEntries = ledgerEntries;</span>
+<span class="fc" id="L774">        }</span>
+        
+<span class="fc" id="L776">        public Long getId() { return id; }</span>
+<span class="fc" id="L777">        public Long getSenderId() { return senderId; }</span>
+<span class="fc" id="L778">        public Long getReceiverId() { return receiverId; }</span>
+<span class="fc" id="L779">        public BigDecimal getAmount() { return amount; }</span>
+<span class="fc" id="L780">        public String getRequestId() { return requestId; }</span>
+<span class="fc" id="L781">        public String getStatus() { return status; }</span>
+<span class="fc" id="L782">        public LocalDateTime getCreatedAt() { return createdAt; }</span>
+<span class="fc" id="L783">        public LocalDateTime getSettlementDate() { return settlementDate; }</span>
+<span class="fc" id="L784">        public Boolean getFraudFlagged() { return fraudFlagged; }</span>
+<span class="fc" id="L785">        public String getAdminReviewStatus() { return adminReviewStatus; }</span>
+<span class="fc" id="L786">        public String getSenderName() { return senderName; }</span>
+<span class="fc" id="L787">        public String getSenderEmail() { return senderEmail; }</span>
+<span class="fc" id="L788">        public String getSenderPhone() { return senderPhone; }</span>
+<span class="fc" id="L789">        public String getReceiverName() { return receiverName; }</span>
+<span class="fc" id="L790">        public String getReceiverEmail() { return receiverEmail; }</span>
+<span class="fc" id="L791">        public String getReceiverPhone() { return receiverPhone; }</span>
+<span class="fc" id="L792">        public List&lt;LedgerEntryDto&gt; getLedgerEntries() { return ledgerEntries; }</span>
+        
+        public static Builder builder() {
+<span class="fc" id="L795">            return new Builder();</span>
+        }
+        
+<span class="fc" id="L798">        public static class Builder {</span>
+            private Long id;
+            private Long senderId;
+            private Long receiverId;
+            private BigDecimal amount;
+            private String requestId;
+            private String status;
+            private LocalDateTime createdAt;
+            private LocalDateTime settlementDate;
+            private Boolean fraudFlagged;
+            private String adminReviewStatus;
+            private String senderName;
+            private String senderEmail;
+            private String senderPhone;
+            private String receiverName;
+            private String receiverEmail;
+            private String receiverPhone;
+            private List&lt;LedgerEntryDto&gt; ledgerEntries;
+            
+<span class="fc" id="L817">            public Builder id(Long id) { this.id = id; return this; }</span>
+<span class="fc" id="L818">            public Builder senderId(Long senderId) { this.senderId = senderId; return this; }</span>
+<span class="fc" id="L819">            public Builder receiverId(Long receiverId) { this.receiverId = receiverId; return this; }</span>
+<span class="fc" id="L820">            public Builder amount(BigDecimal amount) { this.amount = amount; return this; }</span>
+<span class="fc" id="L821">            public Builder requestId(String requestId) { this.requestId = requestId; return this; }</span>
+<span class="fc" id="L822">            public Builder status(String status) { this.status = status; return this; }</span>
+<span class="fc" id="L823">            public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }</span>
+<span class="fc" id="L824">            public Builder settlementDate(LocalDateTime settlementDate) { this.settlementDate = settlementDate; return this; }</span>
+<span class="fc" id="L825">            public Builder fraudFlagged(Boolean fraudFlagged) { this.fraudFlagged = fraudFlagged; return this; }</span>
+<span class="fc" id="L826">            public Builder adminReviewStatus(String adminReviewStatus) { this.adminReviewStatus = adminReviewStatus; return this; }</span>
+<span class="fc" id="L827">            public Builder senderName(String senderName) { this.senderName = senderName; return this; }</span>
+<span class="fc" id="L828">            public Builder senderEmail(String senderEmail) { this.senderEmail = senderEmail; return this; }</span>
+<span class="fc" id="L829">            public Builder senderPhone(String senderPhone) { this.senderPhone = senderPhone; return this; }</span>
+<span class="fc" id="L830">            public Builder receiverName(String receiverName) { this.receiverName = receiverName; return this; }</span>
+<span class="fc" id="L831">            public Builder receiverEmail(String receiverEmail) { this.receiverEmail = receiverEmail; return this; }</span>
+<span class="fc" id="L832">            public Builder receiverPhone(String receiverPhone) { this.receiverPhone = receiverPhone; return this; }</span>
+<span class="fc" id="L833">            public Builder ledgerEntries(List&lt;LedgerEntryDto&gt; ledgerEntries) { this.ledgerEntries = ledgerEntries; return this; }</span>
+            
+            public TransferDetailDto build() {
+<span class="fc" id="L836">                return new TransferDetailDto(id, senderId, receiverId, amount, requestId, status, createdAt,</span>
+<span class="fc" id="L837">                        settlementDate, fraudFlagged, adminReviewStatus, senderName, senderEmail, senderPhone,</span>
+<span class="fc" id="L838">                        receiverName, receiverEmail, receiverPhone, ledgerEntries);</span>
+            }
+        }
+    }
+    
+    // Ledger Entry DTO
+    public static class LedgerEntryDto {
+        private final Long id;
+        private final Long transferId;
+        private final Long userId;
+        private final String type;
+        private final BigDecimal amount;
+        private final BigDecimal balanceBefore;
+        private final BigDecimal balanceAfter;
+        private final LocalDateTime createdAt;
+        
+<span class="fc" id="L854">        public LedgerEntryDto(Long id, Long transferId, Long userId, String type, BigDecimal amount,</span>
+                            BigDecimal balanceBefore, BigDecimal balanceAfter, LocalDateTime createdAt) {
+<span class="fc" id="L856">            this.id = id;</span>
+<span class="fc" id="L857">            this.transferId = transferId;</span>
+<span class="fc" id="L858">            this.userId = userId;</span>
+<span class="fc" id="L859">            this.type = type;</span>
+<span class="fc" id="L860">            this.amount = amount;</span>
+<span class="fc" id="L861">            this.balanceBefore = balanceBefore;</span>
+<span class="fc" id="L862">            this.balanceAfter = balanceAfter;</span>
+<span class="fc" id="L863">            this.createdAt = createdAt;</span>
+<span class="fc" id="L864">        }</span>
+        
+<span class="fc" id="L866">        public Long getId() { return id; }</span>
+<span class="fc" id="L867">        public Long getTransferId() { return transferId; }</span>
+<span class="fc" id="L868">        public Long getUserId() { return userId; }</span>
+<span class="fc" id="L869">        public String getType() { return type; }</span>
+<span class="fc" id="L870">        public BigDecimal getAmount() { return amount; }</span>
+<span class="fc" id="L871">        public BigDecimal getBalanceBefore() { return balanceBefore; }</span>
+<span class="fc" id="L872">        public BigDecimal getBalanceAfter() { return balanceAfter; }</span>
+<span class="fc" id="L873">        public LocalDateTime getCreatedAt() { return createdAt; }</span>
+    }
+    
+    // Get ledger entries for a transfer
+    public List&lt;LedgerEntry&gt; getLedgerEntriesByTransferId(Long transferId) {
+<span class="fc" id="L878">        return ledgerEntryRepository.findByTransferId(transferId);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

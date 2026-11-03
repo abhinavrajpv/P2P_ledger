@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.service</a> &gt; <span class="el_source">AuthService.java</span></div><h1>AuthService.java</h1><pre class="source lang-java linenums">package com.p2pledger.service;
+
+import com.p2pledger.model.LoginAttempts;
+import com.p2pledger.model.Role;
+import com.p2pledger.model.User;
+import com.p2pledger.model.Wallet;
+import com.p2pledger.repository.LoginAttemptsRepository;
+import com.p2pledger.repository.UserRepository;
+import com.p2pledger.repository.WalletRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.regex.Pattern;
+
+@Service
+@RequiredArgsConstructor
+public class AuthService {
+
+    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
+    private static final long LOCKOUT_DURATION_MINUTES = 30;
+    private static final int TRANSACTION_PIN_LENGTH = 4;
+
+    private final UserRepository userRepository;
+    private final WalletRepository walletRepository;
+    private final LoginAttemptsRepository loginAttemptsRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+
+    public User register(String name, String email, String phone, String password, String transactionPin) {
+        // Validate inputs
+<span class="fc" id="L34">        validateEmail(email);</span>
+<span class="fc" id="L35">        validatePhone(phone);</span>
+<span class="fc" id="L36">        validatePassword(password);</span>
+<span class="fc" id="L37">        validateTransactionPin(transactionPin);</span>
+
+        // Check if email or phone already exists
+<span class="fc bfc" id="L40" title="All 2 branches covered.">        if (userRepository.findByEmail(email).isPresent()) {</span>
+<span class="fc" id="L41">            throw new IllegalArgumentException(&quot;Email already registered&quot;);</span>
+        }
+<span class="fc bfc" id="L43" title="All 2 branches covered.">        if (userRepository.findByPhone(phone).isPresent()) {</span>
+<span class="fc" id="L44">            throw new IllegalArgumentException(&quot;Phone already registered&quot;);</span>
+        }
+
+        // Hash password and transaction PIN
+<span class="fc" id="L48">        String hashedPassword = passwordEncoder.encode(password);</span>
+<span class="fc" id="L49">        String hashedTransactionPin = passwordEncoder.encode(transactionPin);</span>
+
+        // Create user with USER role only (never trust client role)
+<span class="fc" id="L52">        User user = User.builder()</span>
+<span class="fc" id="L53">                .name(name)</span>
+<span class="fc" id="L54">                .email(email)</span>
+<span class="fc" id="L55">                .phone(phone)</span>
+<span class="fc" id="L56">                .password(hashedPassword)</span>
+<span class="fc" id="L57">                .transactionPin(hashedTransactionPin)</span>
+<span class="fc" id="L58">                .role(Role.USER)</span>
+<span class="fc" id="L59">                .maskingEnabled(false)</span>
+<span class="fc" id="L60">                .failedLoginCount(0)</span>
+<span class="fc" id="L61">                .lockedUntil(null)</span>
+<span class="fc" id="L62">                .createdAt(LocalDateTime.now())</span>
+<span class="fc" id="L63">                .updatedAt(LocalDateTime.now())</span>
+<span class="fc" id="L64">                .build();</span>
+
+<span class="fc" id="L66">        User savedUser = userRepository.save(user);</span>
+
+        // Create wallet with zero balance
+<span class="fc" id="L69">        Wallet wallet = Wallet.builder()</span>
+<span class="fc" id="L70">                .userId(savedUser.getId())</span>
+<span class="fc" id="L71">                .balance(java.math.BigDecimal.ZERO)</span>
+<span class="fc" id="L72">                .todaySpending(java.math.BigDecimal.ZERO)</span>
+<span class="fc" id="L73">                .dailyLimitResetDate(java.time.LocalDate.now())</span>
+<span class="fc" id="L74">                .status(com.p2pledger.model.WalletStatus.ACTIVE)</span>
+<span class="fc" id="L75">                .version(0L)</span>
+<span class="fc" id="L76">                .createdAt(LocalDateTime.now())</span>
+<span class="fc" id="L77">                .updatedAt(LocalDateTime.now())</span>
+<span class="fc" id="L78">                .build();</span>
+
+<span class="fc" id="L80">        walletRepository.save(wallet);</span>
+
+<span class="fc" id="L82">        return savedUser;</span>
+    }
+
+    public User login(String identifier, String password) {
+        // Find user by email or phone
+<span class="fc" id="L87">        User user = userRepository.findByEmail(identifier)</span>
+<span class="fc" id="L88">                .orElseGet(() -&gt; userRepository.findByPhone(identifier)</span>
+<span class="fc" id="L89">                        .orElse(null));</span>
+
+        // Check if user exists
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        if (user == null) {</span>
+            // Log failed login attempt (user not found)
+<span class="fc" id="L94">            logLoginAttempt(null, identifier, false, &quot;User not found&quot;);</span>
+<span class="fc" id="L95">            throw new IllegalArgumentException(&quot;Invalid credentials&quot;);</span>
+        }
+
+        // Check if account is locked
+<span class="fc bfc" id="L99" title="All 4 branches covered.">        if (user.getLockedUntil() != null &amp;&amp; user.getLockedUntil().isAfter(LocalDateTime.now())) {</span>
+            // Log failed login attempt (account locked)
+<span class="fc" id="L101">            logLoginAttempt(user.getId(), identifier, false, &quot;Account locked&quot;);</span>
+<span class="fc" id="L102">            throw new IllegalArgumentException(&quot;Account is locked until &quot; + user.getLockedUntil());</span>
+        }
+
+        // Verify password
+<span class="fc bfc" id="L106" title="All 2 branches covered.">        if (!passwordEncoder.matches(password, user.getPassword())) {</span>
+            // Increment failed login counter
+<span class="fc" id="L108">            int newFailedCount = user.getFailedLoginCount() + 1;</span>
+<span class="fc" id="L109">            user.setFailedLoginCount(newFailedCount);</span>
+
+            // Lock account if threshold reached
+<span class="fc bfc" id="L112" title="All 2 branches covered.">            if (newFailedCount &gt;= MAX_FAILED_LOGIN_ATTEMPTS) {</span>
+<span class="fc" id="L113">                user.setLockedUntil(LocalDateTime.now().plusMinutes(LOCKOUT_DURATION_MINUTES));</span>
+            }
+
+<span class="fc" id="L116">            userRepository.save(user);</span>
+            
+            // Log failed login attempt (invalid password)
+<span class="fc" id="L119">            logLoginAttempt(user.getId(), identifier, false, &quot;Invalid password&quot;);</span>
+<span class="fc" id="L120">            throw new IllegalArgumentException(&quot;Invalid credentials&quot;);</span>
+        }
+
+        // Reset failed login counter on successful login
+<span class="fc" id="L124">        user.setFailedLoginCount(0);</span>
+<span class="fc" id="L125">        user.setLockedUntil(null);</span>
+<span class="fc" id="L126">        user.setUpdatedAt(LocalDateTime.now());</span>
+
+        // Log successful login attempt
+<span class="fc" id="L129">        logLoginAttempt(user.getId(), identifier, true, &quot;Login successful&quot;);</span>
+
+<span class="fc" id="L131">        return userRepository.save(user);</span>
+    }
+
+    private void logLoginAttempt(Long userId, String identifier, boolean successful, String source) {
+<span class="fc" id="L135">        LoginAttempts loginAttempt = LoginAttempts.builder()</span>
+<span class="fc" id="L136">                .userId(userId)</span>
+<span class="fc" id="L137">                .identifier(identifier)</span>
+<span class="fc" id="L138">                .attemptedAt(LocalDateTime.now())</span>
+<span class="fc" id="L139">                .successful(successful)</span>
+<span class="fc" id="L140">                .source(source)</span>
+<span class="fc" id="L141">                .build();</span>
+        
+<span class="fc" id="L143">        loginAttemptsRepository.save(loginAttempt);</span>
+<span class="fc" id="L144">    }</span>
+
+    private void validateEmail(String email) {
+<span class="fc" id="L147">        String emailRegex = &quot;^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$&quot;;</span>
+<span class="fc bfc" id="L148" title="All 2 branches covered.">        if (!Pattern.matches(emailRegex, email)) {</span>
+<span class="fc" id="L149">            throw new IllegalArgumentException(&quot;Invalid email format&quot;);</span>
+        }
+<span class="fc" id="L151">    }</span>
+
+    private void validatePhone(String phone) {
+        // Validate phone number format (adjust based on requirements)
+<span class="fc" id="L155">        String phoneRegex = &quot;^\\+?[1-9]\\d{1,14}$&quot;;</span>
+<span class="fc bfc" id="L156" title="All 2 branches covered.">        if (!Pattern.matches(phoneRegex, phone)) {</span>
+<span class="fc" id="L157">            throw new IllegalArgumentException(&quot;Invalid phone format&quot;);</span>
+        }
+<span class="fc" id="L159">    }</span>
+
+    private void validatePassword(String password) {
+<span class="fc bfc" id="L162" title="All 4 branches covered.">        if (password == null || password.length() &lt; 8) {</span>
+<span class="fc" id="L163">            throw new IllegalArgumentException(&quot;Password must be at least 8 characters&quot;);</span>
+        }
+<span class="fc bfc" id="L165" title="All 2 branches covered.">        if (!password.matches(&quot;.*[A-Z].*&quot;)) {</span>
+<span class="fc" id="L166">            throw new IllegalArgumentException(&quot;Password must contain at least one uppercase letter&quot;);</span>
+        }
+<span class="fc bfc" id="L168" title="All 2 branches covered.">        if (!password.matches(&quot;.*[a-z].*&quot;)) {</span>
+<span class="fc" id="L169">            throw new IllegalArgumentException(&quot;Password must contain at least one lowercase letter&quot;);</span>
+        }
+<span class="fc bfc" id="L171" title="All 2 branches covered.">        if (!password.matches(&quot;.*\\d.*&quot;)) {</span>
+<span class="fc" id="L172">            throw new IllegalArgumentException(&quot;Password must contain at least one digit&quot;);</span>
+        }
+<span class="fc" id="L174">    }</span>
+
+    private void validateTransactionPin(String pin) {
+<span class="fc bfc" id="L177" title="All 4 branches covered.">        if (pin == null || pin.length() != TRANSACTION_PIN_LENGTH) {</span>
+<span class="fc" id="L178">            throw new IllegalArgumentException(&quot;Transaction PIN must be exactly 4 digits&quot;);</span>
+        }
+<span class="fc bfc" id="L180" title="All 2 branches covered.">        if (!pin.matches(&quot;\\d+&quot;)) {</span>
+<span class="fc" id="L181">            throw new IllegalArgumentException(&quot;Transaction PIN must contain only digits&quot;);</span>
+        }
+<span class="fc" id="L183">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

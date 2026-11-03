@@ -1,0 +1,531 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ScheduledJobService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.service</a> &gt; <span class="el_source">ScheduledJobService.java</span></div><h1>ScheduledJobService.java</h1><pre class="source lang-java linenums">package com.p2pledger.service;
+
+import com.p2pledger.model.*;
+import com.p2pledger.repository.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class ScheduledJobService {
+
+    private final UserRepository userRepository;
+    private final WalletRepository walletRepository;
+    private final TransferRepository transferRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
+    private final FraudAlertRepository fraudAlertRepository;
+    private final NotificationRepository notificationRepository;
+    private final AuditLogRepository auditLogRepository;
+    private final ScheduledJobLogRepository scheduledJobLogRepository;
+    private final DailySummaryRepository dailySummaryRepository;
+    private final SettlementBatchRepository settlementBatchRepository;
+
+    // Task 11.1 - Hourly settlement job
+    @Scheduled(cron = &quot;0 0 * * * ?&quot;) // Run every hour at the top of the hour
+    @Transactional
+    public void settleEligibleTransfers() {
+<span class="fc" id="L35">        String batchId = &quot;SETTLEMENT-&quot; + LocalDateTime.now().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE) + &quot;-&quot; + System.currentTimeMillis();</span>
+
+<span class="fc" id="L37">        SettlementBatch batch = SettlementBatch.builder()</span>
+<span class="fc" id="L38">                .batchId(batchId)</span>
+<span class="fc" id="L39">                .startedAt(LocalDateTime.now())</span>
+<span class="fc" id="L40">                .status(SettlementBatchStatus.RUNNING)</span>
+<span class="fc" id="L41">                .processedCount(0)</span>
+<span class="fc" id="L42">                .failureCount(0)</span>
+<span class="fc" id="L43">                .details(&quot;Starting settlement batch&quot;)</span>
+<span class="fc" id="L44">                .build();</span>
+<span class="fc" id="L45">        settlementBatchRepository.save(batch);</span>
+
+<span class="fc" id="L47">        int processedCount = 0;</span>
+<span class="fc" id="L48">        int failureCount = 0;</span>
+<span class="fc" id="L49">        BigDecimal totalAmount = BigDecimal.ZERO;</span>
+
+        try {
+            // Find all PENDING transfers whose settlement date has arrived
+            // Note: Include ALL pending transfers, even those awaiting admin review
+            // If admin doesn't take action by settlement date, transaction settles automatically
+<span class="fc" id="L55">            List&lt;Transfer&gt; eligibleTransfers = transferRepository.findAll().stream()</span>
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">                    .filter(t -&gt; t.getStatus() == TransferStatus.PENDING)</span>
+<span class="pc bpc" id="L57" title="1 of 4 branches missed.">                    .filter(t -&gt; t.getSettlementDate().isBefore(LocalDateTime.now()) || t.getSettlementDate().equals(LocalDateTime.now()))</span>
+<span class="fc" id="L58">                    .toList();</span>
+
+<span class="fc bfc" id="L60" title="All 2 branches covered.">            for (Transfer transfer : eligibleTransfers) {</span>
+                try {
+                    // Auto-approve if admin review is still pending at settlement time
+<span class="fc bfc" id="L63" title="All 2 branches covered.">                    if (transfer.getAdminReviewStatus() == AdminReviewStatus.PENDING) {</span>
+<span class="fc" id="L64">                        transfer.setAdminReviewStatus(AdminReviewStatus.APPROVED);</span>
+<span class="fc" id="L65">                        transferRepository.save(transfer);</span>
+                        
+                        // Update fraud alert status to APPROVED (auto-approved by system)
+<span class="fc" id="L68">                        FraudAlert fraudAlert = fraudAlertRepository.findByTransferId(transfer.getId()).orElse(null);</span>
+<span class="pc bpc" id="L69" title="2 of 4 branches missed.">                        if (fraudAlert != null &amp;&amp; fraudAlert.getStatus() == FraudStatus.OPEN) {</span>
+<span class="fc" id="L70">                            fraudAlert.setStatus(FraudStatus.APPROVED);</span>
+<span class="fc" id="L71">                            fraudAlert.setReviewedAt(LocalDateTime.now());</span>
+<span class="fc" id="L72">                            fraudAlertRepository.save(fraudAlert);</span>
+                        }
+                    }
+                    
+<span class="fc" id="L76">                    settleTransferInternal(transfer);</span>
+<span class="fc" id="L77">                    processedCount++;</span>
+<span class="fc" id="L78">                    totalAmount = totalAmount.add(transfer.getAmount());</span>
+<span class="fc" id="L79">                } catch (Exception e) {</span>
+<span class="fc" id="L80">                    failureCount++;</span>
+                    // Log error but continue processing other transfers
+                }
+            }
+
+<span class="fc" id="L85">            batch.setStatus(SettlementBatchStatus.SUCCESS);</span>
+<span class="fc" id="L86">            batch.setCompletedAt(LocalDateTime.now());</span>
+<span class="fc" id="L87">            batch.setProcessedCount(processedCount);</span>
+<span class="fc" id="L88">            batch.setFailureCount(failureCount);</span>
+<span class="fc" id="L89">            batch.setDetails(&quot;Processed &quot; + processedCount + &quot; transfers, &quot; + failureCount + &quot; failures, total amount: &quot; + totalAmount);</span>
+<span class="pc" id="L90">        } catch (Exception e) {</span>
+<span class="nc" id="L91">            batch.setStatus(SettlementBatchStatus.FAILED);</span>
+<span class="nc" id="L92">            batch.setCompletedAt(LocalDateTime.now());</span>
+<span class="nc" id="L93">            batch.setDetails(&quot;Error: &quot; + e.getMessage());</span>
+        }
+
+<span class="fc" id="L96">        settlementBatchRepository.save(batch);</span>
+
+        // Log execution with settled count, failed count, and total amount
+<span class="fc" id="L99">        String details = String.format(&quot;{\&quot;batchId\&quot;:\&quot;%s\&quot;,\&quot;processedCount\&quot;:%d,\&quot;failureCount\&quot;:%d,\&quot;totalAmount\&quot;:\&quot;%s\&quot;}&quot;,</span>
+<span class="fc" id="L100">                batchId, processedCount, failureCount, totalAmount.toString());</span>
+<span class="fc" id="L101">        ScheduledJobLog log = ScheduledJobLog.builder()</span>
+<span class="fc" id="L102">                .jobName(&quot;settle_eligible_transfers&quot;)</span>
+<span class="fc" id="L103">                .executionTime(LocalDateTime.now())</span>
+<span class="fc" id="L104">                .status(ScheduledJobStatus.SUCCESS)</span>
+<span class="fc" id="L105">                .details(details)</span>
+<span class="fc" id="L106">                .batchId(batchId)</span>
+<span class="fc" id="L107">                .build();</span>
+<span class="fc" id="L108">        scheduledJobLogRepository.save(log);</span>
+<span class="fc" id="L109">    }</span>
+
+    // Task 11.2 - Daily limit reset job
+    @Scheduled(cron = &quot;0 0 0 * * ?&quot;) // Run daily at midnight
+    @Transactional
+    public void resetDailyLimits() {
+<span class="fc" id="L115">        String batchId = &quot;LIMIT_RESET-&quot; + LocalDate.now().toString();</span>
+
+<span class="fc" id="L117">        int resetCount = 0;</span>
+<span class="fc" id="L118">        int walletCount = 0;</span>
+
+        try {
+<span class="fc" id="L121">            List&lt;Wallet&gt; wallets = walletRepository.findAll();</span>
+
+<span class="fc bfc" id="L123" title="All 2 branches covered.">            for (Wallet wallet : wallets) {</span>
+                // Reset todaySpending to zero
+<span class="fc" id="L125">                wallet.setTodaySpending(BigDecimal.ZERO);</span>
+                // Update dailyLimitResetDate to today
+<span class="fc" id="L127">                wallet.setDailyLimitResetDate(LocalDate.now());</span>
+<span class="fc" id="L128">                walletRepository.save(wallet);</span>
+<span class="fc" id="L129">                resetCount++;</span>
+            }
+
+<span class="fc" id="L132">            walletCount = wallets.size();</span>
+<span class="fc" id="L133">        } catch (Exception e) {</span>
+            // Log error but continue
+        }
+
+        // Log execution
+<span class="fc" id="L138">        String details = String.format(&quot;{\&quot;batchId\&quot;:\&quot;%s\&quot;,\&quot;walletsProcessed\&quot;:%d,\&quot;todaySpendingReset\&quot;:%d}&quot;,</span>
+<span class="fc" id="L139">                batchId, walletCount, resetCount);</span>
+<span class="fc" id="L140">        ScheduledJobLog log = ScheduledJobLog.builder()</span>
+<span class="fc" id="L141">                .jobName(&quot;reset_daily_limits&quot;)</span>
+<span class="fc" id="L142">                .executionTime(LocalDateTime.now())</span>
+<span class="fc" id="L143">                .status(ScheduledJobStatus.SUCCESS)</span>
+<span class="fc" id="L144">                .details(details)</span>
+<span class="fc" id="L145">                .batchId(batchId)</span>
+<span class="fc" id="L146">                .build();</span>
+<span class="fc" id="L147">        scheduledJobLogRepository.save(log);</span>
+<span class="fc" id="L148">    }</span>
+
+    // Task 11.3 - Account unlock job
+    @Scheduled(cron = &quot;0 */5 * * * ?&quot;) // Run every 5 minutes
+    @Transactional
+    public void unlockLockedAccounts() {
+<span class="fc" id="L154">        String batchId = &quot;ACCOUNT_UNLOCK-&quot; + LocalDateTime.now().format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE) + &quot;-&quot; + System.currentTimeMillis();</span>
+
+<span class="fc" id="L156">        int unlockedCount = 0;</span>
+<span class="fc" id="L157">        int checkedCount = 0;</span>
+
+        try {
+<span class="fc" id="L160">            List&lt;User&gt; lockedUsers = userRepository.findAll().stream()</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">                    .filter(u -&gt; u.getLockedUntil() != null)</span>
+<span class="fc" id="L162">                    .filter(u -&gt; u.getLockedUntil().isBefore(LocalDateTime.now()))</span>
+<span class="fc" id="L163">                    .toList();</span>
+
+<span class="fc bfc" id="L165" title="All 2 branches covered.">            for (User user : lockedUsers) {</span>
+<span class="fc" id="L166">                user.setLockedUntil(null);</span>
+<span class="fc" id="L167">                user.setFailedLoginCount(0);</span>
+<span class="fc" id="L168">                userRepository.save(user);</span>
+<span class="fc" id="L169">                unlockedCount++;</span>
+            }
+
+<span class="fc" id="L172">            checkedCount = lockedUsers.size();</span>
+<span class="pc" id="L173">        } catch (Exception e) {</span>
+            // Log error but continue
+        }
+
+        // Log execution
+<span class="fc" id="L178">        String details = String.format(&quot;{\&quot;batchId\&quot;:\&quot;%s\&quot;,\&quot;accountsChecked\&quot;:%d,\&quot;accountsUnlocked\&quot;:%d}&quot;,</span>
+<span class="fc" id="L179">                batchId, checkedCount, unlockedCount);</span>
+<span class="fc" id="L180">        ScheduledJobLog log = ScheduledJobLog.builder()</span>
+<span class="fc" id="L181">                .jobName(&quot;unlock_locked_accounts&quot;)</span>
+<span class="fc" id="L182">                .executionTime(LocalDateTime.now())</span>
+<span class="fc" id="L183">                .status(ScheduledJobStatus.SUCCESS)</span>
+<span class="fc" id="L184">                .details(details)</span>
+<span class="fc" id="L185">                .batchId(batchId)</span>
+<span class="fc" id="L186">                .build();</span>
+<span class="fc" id="L187">        scheduledJobLogRepository.save(log);</span>
+<span class="fc" id="L188">    }</span>
+
+    // Task 11.4 - Daily summary and reconciliation job (combined)
+    @Scheduled(cron = &quot;0 */5 * * * ?&quot;) // Run every 5 minutes
+    @Transactional
+    public void generateDailySummaryAndReconciliation() {
+<span class="fc" id="L194">        LocalDate summaryDate = LocalDate.now();</span>
+
+        // Check if summary already exists for today - if so, update it instead of creating new
+<span class="fc" id="L197">        java.util.Optional&lt;DailySummary&gt; existingSummary = dailySummaryRepository.findBySummaryDate(summaryDate);</span>
+<span class="fc" id="L198">        boolean isUpdate = existingSummary.isPresent();</span>
+
+<span class="fc" id="L200">        String batchId = &quot;DAILY_SUMMARY_RECON-&quot; + summaryDate.toString();</span>
+
+        // Calculate summary statistics
+<span class="fc" id="L203">        LocalDateTime startOfDay = summaryDate.atStartOfDay();</span>
+<span class="fc" id="L204">        LocalDateTime endOfDay = summaryDate.atTime(23, 59, 59);</span>
+
+        // Get all transfers initiated today
+<span class="fc" id="L207">        List&lt;Transfer&gt; initiatedTransfers = transferRepository.findByCreatedAtBetween(startOfDay, endOfDay, org.springframework.data.domain.Pageable.unpaged())</span>
+<span class="fc" id="L208">                .getContent();</span>
+
+        // 1. Total number of transfers initiated and their total amount
+<span class="fc" id="L211">        long totalTransfersInitiated = initiatedTransfers.size();</span>
+<span class="fc" id="L212">        BigDecimal totalAmountInitiated = initiatedTransfers.stream()</span>
+<span class="fc" id="L213">                .map(Transfer::getAmount)</span>
+<span class="fc" id="L214">                .reduce(BigDecimal.ZERO, BigDecimal::add);</span>
+
+        // 2. Total number of transfers settled and their total amount
+<span class="fc" id="L217">        long totalTransfersSettled = initiatedTransfers.stream()</span>
+<span class="pc bpc" id="L218" title="1 of 2 branches missed.">                .filter(t -&gt; t.getStatus() == TransferStatus.SUCCESS)</span>
+<span class="fc" id="L219">                .count();</span>
+<span class="fc" id="L220">        BigDecimal totalAmountSettled = initiatedTransfers.stream()</span>
+<span class="pc bpc" id="L221" title="1 of 2 branches missed.">                .filter(t -&gt; t.getStatus() == TransferStatus.SUCCESS)</span>
+<span class="fc" id="L222">                .map(Transfer::getAmount)</span>
+<span class="fc" id="L223">                .reduce(BigDecimal.ZERO, BigDecimal::add);</span>
+
+        // 3. Number of fraud alerts raised today
+<span class="fc" id="L226">        long fraudAlertsRaised = fraudAlertRepository.findAll().stream()</span>
+<span class="pc bnc" id="L227" title="All 4 branches missed.">                .filter(fa -&gt; fa.getCreatedAt().isAfter(startOfDay) &amp;&amp; fa.getCreatedAt().isBefore(endOfDay))</span>
+<span class="fc" id="L228">                .count();</span>
+
+        // 4. Number of new user registrations today
+<span class="fc" id="L231">        long newUserRegistrations = userRepository.findAll().stream()</span>
+<span class="pc bpc" id="L232" title="2 of 4 branches missed.">                .filter(u -&gt; u.getCreatedAt().isAfter(startOfDay) &amp;&amp; u.getCreatedAt().isBefore(endOfDay))</span>
+<span class="fc" id="L233">                .count();</span>
+
+        // 5. Total pending settlement amount across all users (today's pending transfers)
+<span class="fc" id="L236">        List&lt;Transfer&gt; pendingTransfers = initiatedTransfers.stream()</span>
+<span class="pc bpc" id="L237" title="1 of 2 branches missed.">                .filter(t -&gt; t.getStatus() == TransferStatus.PENDING)</span>
+<span class="fc" id="L238">                .toList();</span>
+<span class="fc" id="L239">        long pendingSettlementCount = pendingTransfers.size();</span>
+<span class="fc" id="L240">        BigDecimal pendingSettlementAmount = pendingTransfers.stream()</span>
+<span class="fc" id="L241">                .map(Transfer::getAmount)</span>
+<span class="fc" id="L242">                .reduce(BigDecimal.ZERO, BigDecimal::add);</span>
+
+        // RECONCILIATION: Get ledger entries for successful transfers only
+<span class="fc" id="L245">        List&lt;Transfer&gt; successfulTransfersForRecon = initiatedTransfers.stream()</span>
+<span class="pc bpc" id="L246" title="1 of 2 branches missed.">                .filter(t -&gt; t.getStatus() == TransferStatus.SUCCESS)</span>
+<span class="fc" id="L247">                .toList();</span>
+        
+<span class="fc" id="L249">        List&lt;Long&gt; successfulTransferIds = successfulTransfersForRecon.stream()</span>
+<span class="fc" id="L250">                .map(Transfer::getId)</span>
+<span class="fc" id="L251">                .toList();</span>
+        
+        // Get all ledger entries for today
+<span class="fc" id="L254">        List&lt;LedgerEntry&gt; todayEntries = ledgerEntryRepository.findByCreatedAtBetween(startOfDay, endOfDay);</span>
+        
+        // Filter to only include entries for successful transfers (excludes deposits and refunds)
+<span class="fc" id="L257">        List&lt;LedgerEntry&gt; transferEntries = todayEntries.stream()</span>
+<span class="pc bpc" id="L258" title="2 of 4 branches missed.">                .filter(e -&gt; e.getTransferId() != null &amp;&amp; successfulTransferIds.contains(e.getTransferId()))</span>
+<span class="fc" id="L259">                .toList();</span>
+        
+<span class="fc" id="L261">        BigDecimal totalDebits = transferEntries.stream()</span>
+<span class="fc bfc" id="L262" title="All 2 branches covered.">                .filter(e -&gt; e.getType() == LedgerType.DEBIT)</span>
+<span class="fc" id="L263">                .map(LedgerEntry::getAmount)</span>
+<span class="fc" id="L264">                .reduce(BigDecimal.ZERO, BigDecimal::add);</span>
+        
+<span class="fc" id="L266">        BigDecimal totalCredits = transferEntries.stream()</span>
+<span class="fc bfc" id="L267" title="All 2 branches covered.">                .filter(e -&gt; e.getType() == LedgerType.CREDIT)</span>
+<span class="fc" id="L268">                .map(LedgerEntry::getAmount)</span>
+<span class="fc" id="L269">                .reduce(BigDecimal.ZERO, BigDecimal::add);</span>
+        
+<span class="fc" id="L271">        long debitCount = transferEntries.stream()</span>
+<span class="fc bfc" id="L272" title="All 2 branches covered.">                .filter(e -&gt; e.getType() == LedgerType.DEBIT)</span>
+<span class="fc" id="L273">                .count();</span>
+        
+<span class="fc" id="L275">        long creditCount = transferEntries.stream()</span>
+<span class="fc bfc" id="L276" title="All 2 branches covered.">                .filter(e -&gt; e.getType() == LedgerType.CREDIT)</span>
+<span class="fc" id="L277">                .count();</span>
+        
+<span class="fc bfc" id="L279" title="All 2 branches covered.">        boolean reconciliationBalanced = totalDebits.compareTo(totalCredits) == 0;</span>
+<span class="fc" id="L280">        BigDecimal reconciliationMismatch = totalDebits.subtract(totalCredits);</span>
+
+        try {
+            DailySummary summary;
+<span class="fc bfc" id="L284" title="All 2 branches covered.">            if (isUpdate) {</span>
+                // Update existing summary
+<span class="fc" id="L286">                summary = existingSummary.get();</span>
+<span class="fc" id="L287">                summary.setTotalTransfersInitiated(totalTransfersInitiated);</span>
+<span class="fc" id="L288">                summary.setTotalAmountInitiated(totalAmountInitiated);</span>
+<span class="fc" id="L289">                summary.setTotalTransfersSettled(totalTransfersSettled);</span>
+<span class="fc" id="L290">                summary.setTotalAmountSettled(totalAmountSettled);</span>
+<span class="fc" id="L291">                summary.setFraudAlertsRaised(fraudAlertsRaised);</span>
+<span class="fc" id="L292">                summary.setNewUserRegistrations(newUserRegistrations);</span>
+<span class="fc" id="L293">                summary.setPendingSettlementCount(pendingSettlementCount);</span>
+<span class="fc" id="L294">                summary.setPendingSettlementAmount(pendingSettlementAmount);</span>
+<span class="fc" id="L295">                summary.setTotalDebits(totalDebits);</span>
+<span class="fc" id="L296">                summary.setTotalCredits(totalCredits);</span>
+<span class="fc" id="L297">                summary.setDebitCount(debitCount);</span>
+<span class="fc" id="L298">                summary.setCreditCount(creditCount);</span>
+<span class="fc" id="L299">                summary.setReconciliationBalanced(reconciliationBalanced);</span>
+<span class="fc" id="L300">                summary.setReconciliationMismatch(reconciliationMismatch);</span>
+<span class="fc" id="L301">                summary.setUpdatedAt(LocalDateTime.now());</span>
+<span class="fc" id="L302">            } else {</span>
+                // Create new summary
+<span class="fc" id="L304">                summary = DailySummary.builder()</span>
+<span class="fc" id="L305">                        .summaryDate(summaryDate)</span>
+                        // New fields
+<span class="fc" id="L307">                        .totalTransfersInitiated(totalTransfersInitiated)</span>
+<span class="fc" id="L308">                        .totalAmountInitiated(totalAmountInitiated)</span>
+<span class="fc" id="L309">                        .totalTransfersSettled(totalTransfersSettled)</span>
+<span class="fc" id="L310">                        .totalAmountSettled(totalAmountSettled)</span>
+<span class="fc" id="L311">                        .fraudAlertsRaised(fraudAlertsRaised)</span>
+<span class="fc" id="L312">                        .newUserRegistrations(newUserRegistrations)</span>
+<span class="fc" id="L313">                        .pendingSettlementCount(pendingSettlementCount)</span>
+<span class="fc" id="L314">                        .pendingSettlementAmount(pendingSettlementAmount)</span>
+                        // Reconciliation fields
+<span class="fc" id="L316">                        .totalDebits(totalDebits)</span>
+<span class="fc" id="L317">                        .totalCredits(totalCredits)</span>
+<span class="fc" id="L318">                        .debitCount(debitCount)</span>
+<span class="fc" id="L319">                        .creditCount(creditCount)</span>
+<span class="fc" id="L320">                        .reconciliationBalanced(reconciliationBalanced)</span>
+<span class="fc" id="L321">                        .reconciliationMismatch(reconciliationMismatch)</span>
+<span class="fc" id="L322">                        .createdAt(LocalDateTime.now())</span>
+<span class="fc" id="L323">                        .updatedAt(LocalDateTime.now())</span>
+<span class="fc" id="L324">                        .build();</span>
+            }
+<span class="fc" id="L326">            dailySummaryRepository.save(summary);</span>
+
+            // If reconciliation is not balanced, create a critical notification for all admins
+<span class="fc bfc" id="L329" title="All 2 branches covered.">            if (!reconciliationBalanced) {</span>
+<span class="fc" id="L330">                createAdminNotificationsForMismatch(summaryDate, reconciliationMismatch);</span>
+            }
+
+            // Log execution
+<span class="fc" id="L334">            String details = String.format(&quot;{\&quot;batchId\&quot;:\&quot;%s\&quot;,\&quot;date\&quot;:\&quot;%s\&quot;,\&quot;initiated\&quot;:%d,\&quot;settled\&quot;:%d,\&quot;fraudAlerts\&quot;:%d,\&quot;newUsers\&quot;:%d,\&quot;pendingAmount\&quot;:\&quot;%s\&quot;,\&quot;reconciliationBalanced\&quot;:%s,\&quot;mismatch\&quot;:\&quot;%s\&quot;}&quot;,</span>
+<span class="fc" id="L335">                    batchId, summaryDate, totalTransfersInitiated, totalTransfersSettled, fraudAlertsRaised, newUserRegistrations, </span>
+<span class="fc" id="L336">                    pendingSettlementAmount, reconciliationBalanced, reconciliationMismatch);</span>
+<span class="fc" id="L337">            ScheduledJobLog log = ScheduledJobLog.builder()</span>
+<span class="fc" id="L338">                    .jobName(&quot;daily_summary_reconciliation&quot;)</span>
+<span class="fc" id="L339">                    .executionTime(LocalDateTime.now())</span>
+<span class="fc" id="L340">                    .status(ScheduledJobStatus.SUCCESS)</span>
+<span class="fc" id="L341">                    .details(details)</span>
+<span class="fc" id="L342">                    .batchId(batchId)</span>
+<span class="fc" id="L343">                    .build();</span>
+<span class="fc" id="L344">            scheduledJobLogRepository.save(log);</span>
+<span class="pc" id="L345">        } catch (Exception e) {</span>
+            // Log execution failure
+<span class="nc" id="L347">            String details = String.format(&quot;{\&quot;batchId\&quot;:\&quot;%s\&quot;,\&quot;error\&quot;:\&quot;%s\&quot;}&quot;, batchId, e.getMessage());</span>
+<span class="nc" id="L348">            ScheduledJobLog log = ScheduledJobLog.builder()</span>
+<span class="nc" id="L349">                    .jobName(&quot;daily_summary_reconciliation&quot;)</span>
+<span class="nc" id="L350">                    .executionTime(LocalDateTime.now())</span>
+<span class="nc" id="L351">                    .status(ScheduledJobStatus.FAILED)</span>
+<span class="nc" id="L352">                    .details(details)</span>
+<span class="nc" id="L353">                    .build();</span>
+<span class="nc" id="L354">            scheduledJobLogRepository.save(log);</span>
+        }
+<span class="fc" id="L356">    }</span>
+
+    // Helper method to create notifications for all admin users when reconciliation mismatch is detected
+    private void createAdminNotificationsForMismatch(LocalDate date, BigDecimal mismatch) {
+        // Get all admin users
+<span class="fc" id="L361">        List&lt;User&gt; adminUsers = userRepository.findAll().stream()</span>
+<span class="pc bpc" id="L362" title="1 of 2 branches missed.">                .filter(u -&gt; u.getRole() == Role.ADMIN)</span>
+<span class="fc" id="L363">                .toList();</span>
+
+<span class="fc bfc" id="L365" title="All 2 branches covered.">        for (User admin : adminUsers) {</span>
+<span class="fc" id="L366">            Notification notification = Notification.builder()</span>
+<span class="fc" id="L367">                    .userId(admin.getId())</span>
+<span class="fc" id="L368">                    .type(NotificationType.SYSTEM)</span>
+<span class="fc" id="L369">                    .message(&quot;⚠️ CRITICAL: Reconciliation mismatch detected for &quot; + date + &quot;. Mismatch amount: ₹&quot; + mismatch + &quot;. Please review immediately.&quot;)</span>
+<span class="fc" id="L370">                    .isRead(false)</span>
+<span class="fc" id="L371">                    .createdAt(LocalDateTime.now())</span>
+<span class="fc" id="L372">                    .build();</span>
+<span class="fc" id="L373">            notificationRepository.save(notification);</span>
+        }
+<span class="fc" id="L375">    }</span>
+
+    // Internal settlement method
+    private void settleTransferInternal(Transfer transfer) {
+<span class="fc" id="L379">        Wallet senderWallet = walletRepository.findByUserId(transfer.getSenderId())</span>
+<span class="pc" id="L380">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Sender wallet not found&quot;));</span>
+<span class="fc" id="L381">        Wallet receiverWallet = walletRepository.findByUserId(transfer.getReceiverId())</span>
+<span class="pc" id="L382">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Receiver wallet not found&quot;));</span>
+
+        // Check receiver wallet status before settlement
+<span class="fc bfc" id="L385" title="All 2 branches covered.">        if (receiverWallet.getStatus() != WalletStatus.ACTIVE) {</span>
+            // Receiver wallet is not active - follow decline/refund rules
+<span class="fc" id="L387">            refundTransferInternal(transfer, senderWallet, receiverWallet);</span>
+<span class="fc" id="L388">            return;</span>
+        }
+
+<span class="fc" id="L391">        BigDecimal amount = transfer.getAmount();</span>
+
+        // Credit receiver wallet
+<span class="fc" id="L394">        BigDecimal receiverOldBalance = receiverWallet.getBalance();</span>
+<span class="fc" id="L395">        BigDecimal receiverNewBalance = receiverOldBalance.add(amount);</span>
+<span class="fc" id="L396">        receiverWallet.setBalance(receiverNewBalance);</span>
+
+        // Create receiver CREDIT ledger entry
+<span class="fc" id="L399">        LedgerEntry receiverLedgerEntry = LedgerEntry.builder()</span>
+<span class="fc" id="L400">                .transferId(transfer.getId())</span>
+<span class="fc" id="L401">                .userId(transfer.getReceiverId())</span>
+<span class="fc" id="L402">                .type(LedgerType.CREDIT)</span>
+<span class="fc" id="L403">                .amount(amount)</span>
+<span class="fc" id="L404">                .balanceBefore(receiverOldBalance)</span>
+<span class="fc" id="L405">                .balanceAfter(receiverNewBalance)</span>
+<span class="fc" id="L406">                .createdAt(LocalDateTime.now())</span>
+<span class="fc" id="L407">                .build();</span>
+<span class="fc" id="L408">        ledgerEntryRepository.save(receiverLedgerEntry);</span>
+
+<span class="fc" id="L410">        walletRepository.save(receiverWallet);</span>
+
+        // Update transfer status to SUCCESS
+<span class="fc" id="L413">        transfer.setStatus(TransferStatus.SUCCESS);</span>
+<span class="fc" id="L414">        transferRepository.save(transfer);</span>
+
+        // Get sender and receiver names for notifications
+<span class="fc" id="L417">        User sender = userRepository.findById(transfer.getSenderId()).orElse(null);</span>
+<span class="fc" id="L418">        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(null);</span>
+<span class="pc bpc" id="L419" title="1 of 2 branches missed.">        String senderName = sender != null ? sender.getName() : &quot;User #&quot; + transfer.getSenderId();</span>
+<span class="pc bpc" id="L420" title="1 of 2 branches missed.">        String receiverName = receiver != null ? receiver.getName() : &quot;User #&quot; + transfer.getReceiverId();</span>
+
+        // Create notification to both sender and receiver
+<span class="fc" id="L423">        System.out.println(&quot;DEBUG: Creating settlement notifications for transfer ID: &quot; + transfer.getId());</span>
+<span class="fc" id="L424">        System.out.println(&quot;DEBUG: Sender ID: &quot; + transfer.getSenderId() + &quot;, Receiver ID: &quot; + transfer.getReceiverId());</span>
+        
+<span class="fc" id="L426">        createNotification(transfer.getSenderId(), NotificationType.SETTLEMENT,</span>
+<span class="fc" id="L427">                &quot;₹&quot; + amount + &quot; transfer to &quot; + receiverName + &quot; has been settled&quot;);</span>
+<span class="fc" id="L428">        createNotification(transfer.getReceiverId(), NotificationType.SETTLEMENT,</span>
+<span class="fc" id="L429">                &quot;₹&quot; + amount + &quot; received from &quot; + senderName);</span>
+        
+<span class="fc" id="L431">        System.out.println(&quot;DEBUG: Settlement notifications created successfully&quot;);</span>
+<span class="fc" id="L432">    }</span>
+
+    // Internal refund method (reused for settlement failures)
+    private void refundTransferInternal(Transfer transfer, Wallet senderWallet, Wallet receiverWallet) {
+        // Check if already refunded (idempotency)
+<span class="pc bpc" id="L437" title="1 of 2 branches missed.">        if (transfer.getAdminReviewStatus() == AdminReviewStatus.REFUNDED) {</span>
+<span class="nc" id="L438">            return;</span>
+        }
+
+<span class="fc" id="L441">        BigDecimal amount = transfer.getAmount();</span>
+
+        // Credit sender wallet (refund)
+<span class="fc" id="L444">        BigDecimal senderOldBalance = senderWallet.getBalance();</span>
+<span class="fc" id="L445">        BigDecimal senderNewBalance = senderOldBalance.add(amount);</span>
+<span class="fc" id="L446">        senderWallet.setBalance(senderNewBalance);</span>
+
+        // Decrease todaySpending for refund
+<span class="fc" id="L449">        BigDecimal newTodaySpending = senderWallet.getTodaySpending().subtract(amount);</span>
+<span class="pc bpc" id="L450" title="1 of 2 branches missed.">        if (newTodaySpending.compareTo(BigDecimal.ZERO) &lt; 0) {</span>
+<span class="nc" id="L451">            newTodaySpending = BigDecimal.ZERO;</span>
+        }
+<span class="fc" id="L453">        senderWallet.setTodaySpending(newTodaySpending);</span>
+
+        // Create sender CREDIT (refund) ledger entry
+<span class="fc" id="L456">        LedgerEntry refundLedgerEntry = LedgerEntry.builder()</span>
+<span class="fc" id="L457">                .transferId(transfer.getId())</span>
+<span class="fc" id="L458">                .userId(transfer.getSenderId())</span>
+<span class="fc" id="L459">                .type(LedgerType.CREDIT)</span>
+<span class="fc" id="L460">                .amount(amount)</span>
+<span class="fc" id="L461">                .balanceBefore(senderOldBalance)</span>
+<span class="fc" id="L462">                .balanceAfter(senderNewBalance)</span>
+<span class="fc" id="L463">                .createdAt(LocalDateTime.now())</span>
+<span class="fc" id="L464">                .build();</span>
+<span class="fc" id="L465">        ledgerEntryRepository.save(refundLedgerEntry);</span>
+
+<span class="fc" id="L467">        walletRepository.save(senderWallet);</span>
+
+        // Update transfer status to DECLINED (refund completed)
+<span class="fc" id="L470">        transfer.setStatus(TransferStatus.DECLINED);</span>
+<span class="fc" id="L471">        transfer.setAdminReviewStatus(AdminReviewStatus.REFUNDED);</span>
+<span class="fc" id="L472">        transferRepository.save(transfer);</span>
+
+        // Update fraud alert
+<span class="fc" id="L475">        FraudAlert fraudAlert = fraudAlertRepository.findByTransferId(transfer.getId()).orElse(null);</span>
+<span class="pc bpc" id="L476" title="1 of 2 branches missed.">        if (fraudAlert != null) {</span>
+<span class="nc" id="L477">            fraudAlert.setStatus(FraudStatus.RESOLVED);</span>
+<span class="nc" id="L478">            fraudAlert.setReviewedAt(LocalDateTime.now());</span>
+<span class="nc" id="L479">            fraudAlertRepository.save(fraudAlert);</span>
+        }
+
+        // Get receiver name for notification
+<span class="fc" id="L483">        User receiver = userRepository.findById(transfer.getReceiverId()).orElse(null);</span>
+<span class="pc bpc" id="L484" title="1 of 2 branches missed.">        String receiverName = receiver != null ? receiver.getName() : &quot;User #&quot; + transfer.getReceiverId();</span>
+
+        // Create notification only for sender (receiver doesn't need to know about failed transfers)
+<span class="fc" id="L487">        createNotification(transfer.getSenderId(), NotificationType.REFUND,</span>
+<span class="fc" id="L488">                &quot;₹&quot; + amount + &quot; transfer to &quot; + receiverName + &quot; failed. Amount refunded to your wallet&quot;);</span>
+<span class="fc" id="L489">    }</span>
+
+    private void createNotification(Long userId, NotificationType type, String message) {
+<span class="fc" id="L492">        Notification notification = Notification.builder()</span>
+<span class="fc" id="L493">                .userId(userId)</span>
+<span class="fc" id="L494">                .type(type)</span>
+<span class="fc" id="L495">                .message(message)</span>
+<span class="fc" id="L496">                .isRead(false)</span>
+<span class="fc" id="L497">                .createdAt(java.time.LocalDateTime.now())</span>
+<span class="fc" id="L498">                .build();</span>
+<span class="fc" id="L499">        notificationRepository.save(notification);</span>
+<span class="fc" id="L500">    }</span>
+
+    private void createAuditLog(Long actorUserId, String action, String entityType, String entityId, String details) {
+<span class="nc" id="L503">        AuditLog auditLog = AuditLog.builder()</span>
+<span class="nc" id="L504">                .actorUserId(actorUserId)</span>
+<span class="nc" id="L505">                .action(action)</span>
+<span class="nc" id="L506">                .entityType(entityType)</span>
+<span class="nc" id="L507">                .entityId(entityId)</span>
+<span class="nc" id="L508">                .details(details)</span>
+<span class="nc" id="L509">                .createdAt(java.time.LocalDateTime.now())</span>
+<span class="nc" id="L510">                .build();</span>
+<span class="nc" id="L511">        auditLogRepository.save(auditLog);</span>
+<span class="nc" id="L512">    }</span>
+
+    // Task 10.5 - Job execution history (delegating to repository) - Last 20 runs
+    public java.util.List&lt;ScheduledJobLog&gt; getJobExecutionHistory(String jobName) {
+<span class="fc" id="L516">        org.springframework.data.domain.Pageable pageable = </span>
+<span class="fc" id="L517">            org.springframework.data.domain.PageRequest.of(0, 20);</span>
+        
+<span class="fc bfc" id="L519" title="All 4 branches covered.">        if (jobName != null &amp;&amp; !jobName.trim().isEmpty()) {</span>
+<span class="fc" id="L520">            return scheduledJobLogRepository.findTop20ByJobNameOrderByExecutionTimeDesc(jobName, pageable);</span>
+        }
+<span class="fc" id="L522">        return scheduledJobLogRepository.findTop20ByOrderByExecutionTimeDesc(pageable);</span>
+    }
+
+    public java.util.List&lt;ScheduledJobLog&gt; getAllJobExecutionHistory() {
+<span class="fc" id="L526">        org.springframework.data.domain.Pageable pageable = </span>
+<span class="fc" id="L527">            org.springframework.data.domain.PageRequest.of(0, 20);</span>
+<span class="fc" id="L528">        return scheduledJobLogRepository.findTop20ByOrderByExecutionTimeDesc(pageable);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

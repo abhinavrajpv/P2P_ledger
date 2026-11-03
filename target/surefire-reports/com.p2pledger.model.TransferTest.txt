@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.p2pledger.model.TransferTest
+-------------------------------------------------------------------------------
+Tests run: 21, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.047 s - in com.p2pledger.model.TransferTest

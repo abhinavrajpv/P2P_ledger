@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WalletService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.service</a> &gt; <span class="el_source">WalletService.java</span></div><h1>WalletService.java</h1><pre class="source lang-java linenums">package com.p2pledger.service;
+
+import com.p2pledger.model.LedgerEntry;
+import com.p2pledger.model.LedgerType;
+import com.p2pledger.model.Role;
+import com.p2pledger.model.Wallet;
+import com.p2pledger.model.WalletStatus;
+import com.p2pledger.repository.LedgerEntryRepository;
+import com.p2pledger.repository.WalletRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+
+@Service
+@RequiredArgsConstructor
+public class WalletService {
+
+    private final WalletRepository walletRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
+
+    public WalletBalanceResponse getBalance(Long userId) {
+<span class="fc" id="L24">        Wallet wallet = walletRepository.findByUserId(userId)</span>
+<span class="fc" id="L25">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Wallet not found for user: &quot; + userId));</span>
+
+<span class="fc" id="L27">        return WalletBalanceResponse.builder()</span>
+<span class="fc" id="L28">                .balance(wallet.getBalance())</span>
+<span class="fc" id="L29">                .todaySpending(wallet.getTodaySpending())</span>
+<span class="fc" id="L30">                .dailyLimit(BigDecimal.valueOf(50000))</span>
+<span class="fc" id="L31">                .status(wallet.getStatus())</span>
+<span class="fc" id="L32">                .build();</span>
+    }
+
+    @Transactional
+    public WalletDepositResponse deposit(Long userId, BigDecimal amount, String reference) {
+<span class="fc bfc" id="L37" title="All 4 branches covered.">        if (amount == null || amount.compareTo(BigDecimal.ZERO) &lt;= 0) {</span>
+<span class="fc" id="L38">            throw new IllegalArgumentException(&quot;Amount must be positive&quot;);</span>
+        }
+
+<span class="fc" id="L41">        Wallet wallet = walletRepository.findByUserId(userId)</span>
+<span class="fc" id="L42">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Wallet not found for user: &quot; + userId));</span>
+
+<span class="fc" id="L44">        BigDecimal oldBalance = wallet.getBalance();</span>
+<span class="fc" id="L45">        BigDecimal newBalance = oldBalance.add(amount);</span>
+<span class="fc" id="L46">        wallet.setBalance(newBalance);</span>
+
+<span class="fc" id="L48">        LedgerEntry ledgerEntry = LedgerEntry.builder()</span>
+<span class="fc" id="L49">                .transferId(null)</span>
+<span class="fc" id="L50">                .userId(userId)</span>
+<span class="fc" id="L51">                .type(LedgerType.CREDIT)</span>
+<span class="fc" id="L52">                .amount(amount)</span>
+<span class="fc" id="L53">                .balanceBefore(oldBalance)</span>
+<span class="fc" id="L54">                .balanceAfter(newBalance)</span>
+<span class="fc" id="L55">                .referenceId(reference)</span>
+<span class="fc" id="L56">                .createdAt(java.time.LocalDateTime.now())</span>
+<span class="fc" id="L57">                .build();</span>
+<span class="fc" id="L58">        ledgerEntryRepository.save(ledgerEntry);</span>
+
+<span class="fc" id="L60">        walletRepository.save(wallet);</span>
+
+<span class="fc" id="L62">        return WalletDepositResponse.builder()</span>
+<span class="fc" id="L63">                .id(wallet.getId())</span>
+<span class="fc" id="L64">                .amount(amount)</span>
+<span class="fc" id="L65">                .newBalance(newBalance)</span>
+<span class="fc" id="L66">                .reference(reference)</span>
+<span class="fc" id="L67">                .build();</span>
+    }
+
+    @Transactional
+    public WalletStatusResponse updateStatus(Long userId, WalletStatus status, Role callerRole) {
+<span class="fc" id="L72">        Wallet wallet = walletRepository.findByUserId(userId)</span>
+<span class="fc" id="L73">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Wallet not found for user: &quot; + userId));</span>
+
+<span class="fc" id="L75">        WalletStatus currentStatus = wallet.getStatus();</span>
+
+<span class="fc bfc" id="L77" title="All 2 branches covered.">        if (currentStatus == status) {</span>
+<span class="fc" id="L78">            return WalletStatusResponse.builder()</span>
+<span class="fc" id="L79">                    .wallet(wallet)</span>
+<span class="fc" id="L80">                    .build();</span>
+        }
+
+        // Admin can freeze any wallet to FROZEN and unfreeze FROZEN to ACTIVE
+<span class="fc bfc" id="L84" title="All 2 branches covered.">        if (callerRole == Role.ADMIN) {</span>
+<span class="pc bpc" id="L85" title="1 of 4 branches missed.">            if (status == WalletStatus.ACTIVE &amp;&amp; currentStatus == WalletStatus.FROZEN) {</span>
+<span class="fc" id="L86">                wallet.setStatus(WalletStatus.ACTIVE);</span>
+<span class="fc" id="L87">                walletRepository.save(wallet);</span>
+<span class="fc" id="L88">                return WalletStatusResponse.builder()</span>
+<span class="fc" id="L89">                        .wallet(wallet)</span>
+<span class="fc" id="L90">                        .build();</span>
+            }
+<span class="pc bpc" id="L92" title="1 of 2 branches missed.">            if (status == WalletStatus.FROZEN) {</span>
+<span class="fc" id="L93">                wallet.setStatus(WalletStatus.FROZEN);</span>
+<span class="fc" id="L94">                walletRepository.save(wallet);</span>
+<span class="fc" id="L95">                return WalletStatusResponse.builder()</span>
+<span class="fc" id="L96">                        .wallet(wallet)</span>
+<span class="fc" id="L97">                        .build();</span>
+            }
+        }
+
+        // User can only change between ACTIVE and INACTIVE
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">        if (callerRole == Role.USER) {</span>
+<span class="pc bpc" id="L103" title="1 of 4 branches missed.">            if ((currentStatus == WalletStatus.ACTIVE &amp;&amp; status == WalletStatus.INACTIVE) ||</span>
+<span class="pc bpc" id="L104" title="3 of 4 branches missed.">                (currentStatus == WalletStatus.INACTIVE &amp;&amp; status == WalletStatus.ACTIVE)) {</span>
+<span class="nc" id="L105">                wallet.setStatus(status);</span>
+<span class="nc" id="L106">                walletRepository.save(wallet);</span>
+<span class="nc" id="L107">                return WalletStatusResponse.builder()</span>
+<span class="nc" id="L108">                        .wallet(wallet)</span>
+<span class="nc" id="L109">                        .build();</span>
+            }
+        }
+
+<span class="fc" id="L113">        throw new IllegalArgumentException(&quot;Invalid status transition for user role&quot;);</span>
+    }
+
+    public static class WalletBalanceResponse {
+        private final BigDecimal balance;
+        private final BigDecimal todaySpending;
+        private final BigDecimal dailyLimit;
+        private final WalletStatus status;
+
+<span class="fc" id="L122">        public WalletBalanceResponse(BigDecimal balance, BigDecimal todaySpending, BigDecimal dailyLimit, WalletStatus status) {</span>
+<span class="fc" id="L123">            this.balance = balance;</span>
+<span class="fc" id="L124">            this.todaySpending = todaySpending;</span>
+<span class="fc" id="L125">            this.dailyLimit = dailyLimit;</span>
+<span class="fc" id="L126">            this.status = status;</span>
+<span class="fc" id="L127">        }</span>
+
+<span class="fc" id="L129">        public BigDecimal getBalance() { return balance; }</span>
+<span class="fc" id="L130">        public BigDecimal getTodaySpending() { return todaySpending; }</span>
+<span class="fc" id="L131">        public BigDecimal getDailyLimit() { return dailyLimit; }</span>
+<span class="fc" id="L132">        public WalletStatus getStatus() { return status; }</span>
+
+        public static Builder builder() {
+<span class="fc" id="L135">            return new Builder();</span>
+        }
+
+<span class="fc" id="L138">        public static class Builder {</span>
+            private BigDecimal balance;
+            private BigDecimal todaySpending;
+            private BigDecimal dailyLimit;
+            private WalletStatus status;
+
+            public Builder balance(BigDecimal balance) {
+<span class="fc" id="L145">                this.balance = balance;</span>
+<span class="fc" id="L146">                return this;</span>
+            }
+
+            public Builder todaySpending(BigDecimal todaySpending) {
+<span class="fc" id="L150">                this.todaySpending = todaySpending;</span>
+<span class="fc" id="L151">                return this;</span>
+            }
+
+            public Builder dailyLimit(BigDecimal dailyLimit) {
+<span class="fc" id="L155">                this.dailyLimit = dailyLimit;</span>
+<span class="fc" id="L156">                return this;</span>
+            }
+
+            public Builder status(WalletStatus status) {
+<span class="fc" id="L160">                this.status = status;</span>
+<span class="fc" id="L161">                return this;</span>
+            }
+
+            public WalletBalanceResponse build() {
+<span class="fc" id="L165">                return new WalletBalanceResponse(balance, todaySpending, dailyLimit, status);</span>
+            }
+        }
+    }
+
+    public static class WalletDepositResponse {
+        private final Long id;
+        private final BigDecimal amount;
+        private final BigDecimal newBalance;
+        private final String reference;
+
+<span class="fc" id="L176">        public WalletDepositResponse(Long id, BigDecimal amount, BigDecimal newBalance, String reference) {</span>
+<span class="fc" id="L177">            this.id = id;</span>
+<span class="fc" id="L178">            this.amount = amount;</span>
+<span class="fc" id="L179">            this.newBalance = newBalance;</span>
+<span class="fc" id="L180">            this.reference = reference;</span>
+<span class="fc" id="L181">        }</span>
+
+<span class="fc" id="L183">        public Long getId() { return id; }</span>
+<span class="fc" id="L184">        public BigDecimal getAmount() { return amount; }</span>
+<span class="fc" id="L185">        public BigDecimal getNewBalance() { return newBalance; }</span>
+<span class="fc" id="L186">        public String getReference() { return reference; }</span>
+
+        public static Builder builder() {
+<span class="fc" id="L189">            return new Builder();</span>
+        }
+
+<span class="fc" id="L192">        public static class Builder {</span>
+            private Long id;
+            private BigDecimal amount;
+            private BigDecimal newBalance;
+            private String reference;
+
+            public Builder id(Long id) {
+<span class="fc" id="L199">                this.id = id;</span>
+<span class="fc" id="L200">                return this;</span>
+            }
+
+            public Builder amount(BigDecimal amount) {
+<span class="fc" id="L204">                this.amount = amount;</span>
+<span class="fc" id="L205">                return this;</span>
+            }
+
+            public Builder newBalance(BigDecimal newBalance) {
+<span class="fc" id="L209">                this.newBalance = newBalance;</span>
+<span class="fc" id="L210">                return this;</span>
+            }
+
+            public Builder reference(String reference) {
+<span class="fc" id="L214">                this.reference = reference;</span>
+<span class="fc" id="L215">                return this;</span>
+            }
+
+            public WalletDepositResponse build() {
+<span class="fc" id="L219">                return new WalletDepositResponse(id, amount, newBalance, reference);</span>
+            }
+        }
+    }
+
+    public static class WalletStatusResponse {
+        private final Wallet wallet;
+
+<span class="fc" id="L227">        public WalletStatusResponse(Wallet wallet) {</span>
+<span class="fc" id="L228">            this.wallet = wallet;</span>
+<span class="fc" id="L229">        }</span>
+
+<span class="fc" id="L231">        public Wallet getWallet() { return wallet; }</span>
+
+        public static Builder builder() {
+<span class="fc" id="L234">            return new Builder();</span>
+        }
+
+<span class="fc" id="L237">        public static class Builder {</span>
+            private Wallet wallet;
+
+            public Builder wallet(Wallet wallet) {
+<span class="fc" id="L241">                this.wallet = wallet;</span>
+<span class="fc" id="L242">                return this;</span>
+            }
+
+            public WalletStatusResponse build() {
+<span class="fc" id="L246">                return new WalletStatusResponse(wallet);</span>
+            }
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

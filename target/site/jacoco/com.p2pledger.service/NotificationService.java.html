@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>NotificationService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.service</a> &gt; <span class="el_source">NotificationService.java</span></div><h1>NotificationService.java</h1><pre class="source lang-java linenums">package com.p2pledger.service;
+
+import com.p2pledger.model.Notification;
+import com.p2pledger.model.NotificationType;
+import com.p2pledger.repository.NotificationRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class NotificationService {
+
+    private final NotificationRepository notificationRepository;
+
+    @Transactional
+    public Notification createNotification(Long userId, NotificationType type, String message) {
+<span class="fc" id="L26">        Notification notification = Notification.builder()</span>
+<span class="fc" id="L27">                .userId(userId)</span>
+<span class="fc" id="L28">                .type(type)</span>
+<span class="fc" id="L29">                .message(message)</span>
+<span class="fc" id="L30">                .isRead(false)</span>
+<span class="fc" id="L31">                .createdAt(LocalDateTime.now())</span>
+<span class="fc" id="L32">                .build();</span>
+<span class="fc" id="L33">        return notificationRepository.save(notification);</span>
+    }
+
+    @Transactional
+    public void markAsRead(Long notificationId, Long userId) {
+<span class="fc" id="L38">        Notification notification = notificationRepository.findById(notificationId)</span>
+<span class="fc" id="L39">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Notification not found&quot;));</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">        if (!notification.getUserId().equals(userId)) {</span>
+<span class="fc" id="L41">            throw new IllegalArgumentException(&quot;Access denied&quot;);</span>
+        }
+<span class="fc" id="L43">        notification.setRead(true);  // Lombok generates setRead() from isRead field</span>
+<span class="fc" id="L44">        notificationRepository.save(notification);</span>
+<span class="fc" id="L45">    }</span>
+
+    @Transactional
+    public void markAllAsRead(Long userId) {
+<span class="fc" id="L49">        List&lt;Notification&gt; notifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);</span>
+<span class="fc bfc" id="L50" title="All 2 branches covered.">        for (Notification notification : notifications) {</span>
+<span class="fc" id="L51">            notification.setRead(true);  // Lombok generates setRead() from isRead field</span>
+        }
+<span class="fc" id="L53">        notificationRepository.saveAll(notifications);</span>
+<span class="fc" id="L54">    }</span>
+
+    public int getUnreadCount(Long userId) {
+<span class="fc" id="L57">        return notificationRepository.countByUserIdAndIsReadFalse(userId);</span>
+    }
+
+    public Page&lt;Notification&gt; getNotifications(Long userId, Pageable pageable) {
+<span class="fc" id="L61">        List&lt;Notification&gt; allNotifications = notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);</span>
+        
+        // Sort by createdAt descending (most recent first)
+<span class="fc" id="L64">        List&lt;Notification&gt; sortedNotifications = allNotifications.stream()</span>
+<span class="fc" id="L65">                .sorted(Comparator.comparing(Notification::getCreatedAt).reversed())</span>
+<span class="fc" id="L66">                .collect(Collectors.toList());</span>
+        
+        // Apply pagination
+<span class="fc" id="L69">        int start = (int) pageable.getOffset();</span>
+<span class="fc" id="L70">        int end = Math.min(start + pageable.getPageSize(), sortedNotifications.size());</span>
+        
+<span class="fc bfc" id="L72" title="All 2 branches covered.">        List&lt;Notification&gt; pageContent = start &lt; sortedNotifications.size() </span>
+<span class="fc" id="L73">                ? sortedNotifications.subList(start, end) </span>
+<span class="fc" id="L74">                : List.of();</span>
+        
+<span class="fc" id="L76">        return new PageImpl&lt;&gt;(pageContent, pageable, sortedNotifications.size());</span>
+    }
+
+    public List&lt;Notification&gt; getNotifications(Long userId) {
+<span class="fc" id="L80">        return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

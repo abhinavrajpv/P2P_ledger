@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdminController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.controller</a> &gt; <span class="el_source">AdminController.java</span></div><h1>AdminController.java</h1><pre class="source lang-java linenums">package com.p2pledger.controller;
+
+import com.p2pledger.model.*;
+import com.p2pledger.service.AdminService;
+import com.p2pledger.service.TransferService;
+import com.p2pledger.service.ScheduledJobService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping(&quot;/api/admin&quot;)
+@RequiredArgsConstructor
+@PreAuthorize(&quot;hasRole('ADMIN')&quot;)
+public class AdminController {
+
+    private final AdminService adminService;
+    private final TransferService transferService;
+    private final ScheduledJobService scheduledJobService;
+
+    @GetMapping(&quot;/dashboard&quot;)
+    public ResponseEntity&lt;AdminService.DashboardData&gt; getDashboard(Authentication authentication) {
+<span class="fc" id="L34">        return ResponseEntity.ok(adminService.getDashboardData());</span>
+    }
+    
+    @GetMapping(&quot;/dashboard/chart&quot;)
+    public ResponseEntity&lt;List&lt;AdminService.DailyVolumeData&gt;&gt; getDailyVolumeChart(Authentication authentication) {
+<span class="fc" id="L39">        return ResponseEntity.ok(adminService.getDailyVolumeChart());</span>
+    }
+    
+    @GetMapping(&quot;/users&quot;)
+    public ResponseEntity&lt;Page&lt;AdminService.UserWithWallet&gt;&gt; getAllUsers(Pageable pageable, Authentication authentication) {
+<span class="fc" id="L44">        return ResponseEntity.ok(adminService.getAllUsersWithWallet(pageable));</span>
+    }
+    
+    @GetMapping(&quot;/users/{userId}&quot;)
+    public ResponseEntity&lt;AdminService.UserDetail&gt; getUserDetail(@PathVariable Long userId, Authentication authentication) {
+<span class="fc" id="L49">        return ResponseEntity.ok(adminService.getUserDetail(userId));</span>
+    }
+    
+    @PostMapping(&quot;/users/{userId}/freeze&quot;)
+    public ResponseEntity&lt;Map&lt;String, String&gt;&gt; freezeUserWallet(@PathVariable Long userId, Authentication authentication) {
+<span class="fc" id="L54">        Long adminUserId = Long.parseLong(authentication.getName());</span>
+<span class="fc" id="L55">        adminService.freezeUserWallet(userId, adminUserId);</span>
+<span class="fc" id="L56">        Map&lt;String, String&gt; response = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L57">        response.put(&quot;message&quot;, &quot;User wallet frozen successfully&quot;);</span>
+<span class="fc" id="L58">        return ResponseEntity.ok(response);</span>
+    }
+    
+    @PostMapping(&quot;/users/{userId}/unfreeze&quot;)
+    public ResponseEntity&lt;Map&lt;String, String&gt;&gt; unfreezeUserWallet(@PathVariable Long userId, Authentication authentication) {
+<span class="fc" id="L63">        Long adminUserId = Long.parseLong(authentication.getName());</span>
+<span class="fc" id="L64">        adminService.unfreezeUserWallet(userId, adminUserId);</span>
+<span class="fc" id="L65">        Map&lt;String, String&gt; response = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L66">        response.put(&quot;message&quot;, &quot;User wallet unfrozen successfully&quot;);</span>
+<span class="fc" id="L67">        return ResponseEntity.ok(response);</span>
+    }
+    
+    @GetMapping(&quot;/settlements/summary&quot;)
+    public ResponseEntity&lt;AdminService.SettlementSummary&gt; getSettlementSummary(Authentication authentication) {
+<span class="fc" id="L72">        return ResponseEntity.ok(adminService.getSettlementSummary());</span>
+    }
+
+    @GetMapping(&quot;/transactions&quot;)
+    public ResponseEntity&lt;Page&lt;Transfer&gt;&gt; getTransactions(
+            Pageable pageable,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long senderId,
+            @RequestParam(required = false) Long receiverId,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
+            @RequestParam(required = false) java.math.BigDecimal minAmount,
+            @RequestParam(required = false) java.math.BigDecimal maxAmount,
+            Authentication authentication) {
+<span class="fc bfc" id="L86" title="All 2 branches covered.">        LocalDateTime startDateTime = startDate != null ? startDate.atStartOfDay() : null;</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">        LocalDateTime endDateTime = endDate != null ? endDate.atTime(23, 59, 59) : null;</span>
+<span class="fc" id="L88">        return ResponseEntity.ok(adminService.getTransactionsWithFilters(pageable, status, senderId, receiverId, </span>
+<span class="fc" id="L89">                startDateTime, endDateTime, minAmount, maxAmount));</span>
+    }
+
+    @GetMapping(&quot;/settlements&quot;)
+    public ResponseEntity&lt;Page&lt;Transfer&gt;&gt; getPendingSettlements(Pageable pageable, Authentication authentication) {
+<span class="fc" id="L94">        return ResponseEntity.ok(adminService.getPendingSettlements(pageable));</span>
+    }
+
+    @PostMapping(&quot;/settlements/process&quot;)
+    public ResponseEntity&lt;Transfer&gt; processSettlement(@RequestBody ProcessSettlementRequest request, Authentication authentication) {
+<span class="fc" id="L99">        Long adminUserId = Long.parseLong(authentication.getName());</span>
+<span class="fc" id="L100">        return ResponseEntity.ok(adminService.processSettlement(request.getTransferId(), adminUserId));</span>
+    }
+
+    @GetMapping(&quot;/fraud&quot;)
+    public ResponseEntity&lt;Page&lt;FraudAlert&gt;&gt; getFlaggedTransactions(Pageable pageable, Authentication authentication) {
+<span class="fc" id="L105">        return ResponseEntity.ok(adminService.getFlaggedTransactions(pageable));</span>
+    }
+
+    @PostMapping(&quot;/fraud/{id}/approve&quot;)
+    public ResponseEntity&lt;Transfer&gt; approveTransaction(@PathVariable Long id, Authentication authentication) {
+<span class="fc" id="L110">        Long adminUserId = Long.parseLong(authentication.getName());</span>
+<span class="fc" id="L111">        return ResponseEntity.ok(adminService.approveTransaction(id, adminUserId));</span>
+    }
+
+    @PostMapping(&quot;/fraud/{id}/refund&quot;)
+    public ResponseEntity&lt;Transfer&gt; refundTransaction(@PathVariable Long id, Authentication authentication) {
+<span class="fc" id="L116">        Long adminUserId = Long.parseLong(authentication.getName());</span>
+<span class="fc" id="L117">        return ResponseEntity.ok(adminService.refundTransaction(id, adminUserId));</span>
+    }
+
+    @GetMapping(&quot;/jobs&quot;)
+    public ResponseEntity&lt;List&lt;ScheduledJobLog&gt;&gt; getJobExecutionHistory(
+            @RequestParam(required = false) String jobName,
+            Authentication authentication) {
+<span class="fc" id="L124">        return ResponseEntity.ok(scheduledJobService.getJobExecutionHistory(jobName));</span>
+    }
+
+    @GetMapping(&quot;/reconciliation&quot;)
+    public ResponseEntity&lt;java.util.List&lt;DailySummary&gt;&gt; getReconciliationReport(
+            @RequestParam LocalDate startDate,
+            @RequestParam LocalDate endDate,
+            Authentication authentication) {
+<span class="fc" id="L132">        return ResponseEntity.ok(adminService.getReconciliationReport(startDate, endDate));</span>
+    }
+    
+    @GetMapping(&quot;/login-attempts&quot;)
+    public ResponseEntity&lt;List&lt;com.p2pledger.model.LoginAttempts&gt;&gt; getLoginAttempts(
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String identifier,
+            @RequestParam(required = false) Boolean successful,
+            Authentication authentication) {
+<span class="fc" id="L141">        return ResponseEntity.ok(adminService.getLoginAttempts(userId, identifier, successful));</span>
+    }
+    
+    @GetMapping(&quot;/login-attempts/failed&quot;)
+    public ResponseEntity&lt;List&lt;com.p2pledger.model.LoginAttempts&gt;&gt; getFailedLoginAttempts(Authentication authentication) {
+<span class="fc" id="L146">        return ResponseEntity.ok(adminService.getFailedLoginAttempts());</span>
+    }
+
+<span class="fc" id="L149">    public static class ProcessSettlementRequest {</span>
+        private Long transferId;
+
+<span class="fc" id="L152">        public Long getTransferId() { return transferId; }</span>
+<span class="fc" id="L153">        public void setTransferId(Long transferId) { this.transferId = transferId; }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

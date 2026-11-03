@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PinVerificationAspect.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.aspect</a> &gt; <span class="el_source">PinVerificationAspect.java</span></div><h1>PinVerificationAspect.java</h1><pre class="source lang-java linenums">package com.p2pledger.aspect;
+
+import com.p2pledger.annotation.RequirePin;
+import com.p2pledger.model.User;
+import com.p2pledger.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
+
+@Aspect
+@Component
+@RequiredArgsConstructor
+public class PinVerificationAspect {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    @Around(&quot;@annotation(requirePin)&quot;)
+    public Object verifyPin(ProceedingJoinPoint joinPoint, RequirePin requirePin) throws Throwable {
+<span class="fc" id="L23">        Object[] args = joinPoint.getArgs();</span>
+
+<span class="fc" id="L25">        int userIdIndex = requirePin.userIdIndex();</span>
+<span class="fc" id="L26">        int pinIndex = requirePin.pinIndex();</span>
+
+        // Validate that the required arguments exist
+<span class="fc bfc" id="L29" title="All 4 branches covered.">        if (args.length &lt;= userIdIndex || args.length &lt;= pinIndex) {</span>
+<span class="fc" id="L30">            throw new IllegalArgumentException(&quot;Invalid PIN verification configuration: method does not have required parameters&quot;);</span>
+        }
+
+        // Validate argument types
+<span class="fc bfc" id="L34" title="All 2 branches covered.">        if (!(args[userIdIndex] instanceof Long)) {</span>
+<span class="fc" id="L35">            throw new IllegalArgumentException(&quot;PIN verification requires Long userId parameter at position &quot; + userIdIndex);</span>
+        }
+<span class="fc bfc" id="L37" title="All 2 branches covered.">        if (!(args[pinIndex] instanceof String)) {</span>
+<span class="fc" id="L38">            throw new IllegalArgumentException(&quot;PIN verification requires String pin parameter at position &quot; + pinIndex);</span>
+        }
+
+<span class="fc" id="L41">        Long userId = (Long) args[userIdIndex];</span>
+<span class="fc" id="L42">        String providedPin = (String) args[pinIndex];</span>
+
+        // Validate PIN format - must be exactly 4 digits
+<span class="pc bpc" id="L45" title="1 of 6 branches missed.">        if (providedPin == null || providedPin.length() != 4 || !providedPin.matches(&quot;\\d{4}&quot;)) {</span>
+<span class="fc" id="L46">            throw new IllegalArgumentException(&quot;Invalid transaction PIN&quot;);</span>
+        }
+
+<span class="fc" id="L49">        User user = userRepository.findById(userId)</span>
+<span class="fc" id="L50">                .orElseThrow(() -&gt; new IllegalArgumentException(&quot;User not found&quot;));</span>
+
+<span class="fc" id="L52">        String storedHash = user.getTransactionPin();</span>
+<span class="fc bfc" id="L53" title="All 4 branches covered.">        if (storedHash == null || storedHash.isEmpty()) {</span>
+<span class="fc" id="L54">            throw new IllegalArgumentException(&quot;Invalid transaction PIN&quot;);</span>
+        }
+
+        // Verify PIN using BCrypt hash comparison
+<span class="fc bfc" id="L58" title="All 2 branches covered.">        if (!passwordEncoder.matches(providedPin, storedHash)) {</span>
+<span class="fc" id="L59">            throw new IllegalArgumentException(&quot;Invalid transaction PIN&quot;);</span>
+        }
+
+<span class="fc" id="L62">        return joinPoint.proceed();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

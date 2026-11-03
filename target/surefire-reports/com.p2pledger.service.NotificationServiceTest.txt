@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.p2pledger.service.NotificationServiceTest
+-------------------------------------------------------------------------------
+Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.053 s - in com.p2pledger.service.NotificationServiceTest

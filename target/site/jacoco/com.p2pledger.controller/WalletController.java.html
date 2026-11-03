@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WalletController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.controller</a> &gt; <span class="el_source">WalletController.java</span></div><h1>WalletController.java</h1><pre class="source lang-java linenums">package com.p2pledger.controller;
+
+import com.p2pledger.model.Role;
+import com.p2pledger.model.WalletStatus;
+import com.p2pledger.service.WalletService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping(&quot;/api/wallet&quot;)
+@RequiredArgsConstructor
+public class WalletController {
+
+    private final WalletService walletService;
+
+    @GetMapping(&quot;/balance&quot;)
+    public ResponseEntity&lt;WalletService.WalletBalanceResponse&gt; getBalance(Authentication authentication) {
+<span class="fc" id="L23">        Long userId = Long.parseLong(authentication.getName());</span>
+<span class="fc" id="L24">        return ResponseEntity.ok(walletService.getBalance(userId));</span>
+    }
+
+    @PostMapping(&quot;/deposit&quot;)
+    public ResponseEntity&lt;WalletService.WalletDepositResponse&gt; deposit(
+            @RequestBody DepositRequest request,
+            Authentication authentication) {
+<span class="fc" id="L31">        Long userId = Long.parseLong(authentication.getName());</span>
+<span class="fc" id="L32">        return ResponseEntity.ok(walletService.deposit(userId, request.getAmount(), request.getReference()));</span>
+    }
+
+    @PatchMapping(&quot;/status&quot;)
+    public ResponseEntity&lt;WalletService.WalletStatusResponse&gt; updateStatus(
+            @RequestBody StatusUpdateRequest request,
+            Authentication authentication) {
+<span class="fc" id="L39">        Long userId = Long.parseLong(authentication.getName());</span>
+<span class="fc" id="L40">        Role callerRole = authentication.getAuthorities().stream()</span>
+<span class="fc bfc" id="L41" title="All 2 branches covered.">                .anyMatch(a -&gt; a.getAuthority().equals(&quot;ROLE_ADMIN&quot;)) ? Role.ADMIN : Role.USER;</span>
+<span class="fc" id="L42">        return ResponseEntity.ok(walletService.updateStatus(userId, request.getStatus(), callerRole));</span>
+    }
+
+<span class="fc" id="L45">    public static class DepositRequest {</span>
+        private java.math.BigDecimal amount;
+        private String reference;
+
+<span class="fc" id="L49">        public java.math.BigDecimal getAmount() { return amount; }</span>
+<span class="fc" id="L50">        public void setAmount(java.math.BigDecimal amount) { this.amount = amount; }</span>
+<span class="fc" id="L51">        public String getReference() { return reference; }</span>
+<span class="fc" id="L52">        public void setReference(String reference) { this.reference = reference; }</span>
+    }
+
+<span class="fc" id="L55">    public static class StatusUpdateRequest {</span>
+        private WalletStatus status;
+
+<span class="fc" id="L58">        public WalletStatus getStatus() { return status; }</span>
+<span class="fc" id="L59">        public void setStatus(WalletStatus status) { this.status = status; }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

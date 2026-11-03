@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">P2P Payment Ledger</a> &gt; <a href="index.source.html" class="el_package">com.p2pledger.controller</a> &gt; <span class="el_source">AuthController.java</span></div><h1>AuthController.java</h1><pre class="source lang-java linenums">package com.p2pledger.controller;
+
+import com.p2pledger.service.AuthService;
+import com.p2pledger.service.JwtService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping(&quot;/api/auth&quot;)
+@RequiredArgsConstructor
+public class AuthController {
+
+    private final AuthService authService;
+    private final JwtService jwtService;
+
+    @PostMapping(&quot;/register&quot;)
+    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; register(@RequestBody RegisterRequest request) {
+<span class="fc" id="L24">        authService.register(request.getName(), request.getEmail(), request.getPhone(), request.getPassword(), request.getTransactionPin());</span>
+        
+<span class="fc" id="L26">        Map&lt;String, Object&gt; response = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L27">        response.put(&quot;message&quot;, &quot;User registered successfully&quot;);</span>
+<span class="fc" id="L28">        return ResponseEntity.ok(response);</span>
+    }
+
+    @PostMapping(&quot;/login&quot;)
+    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; login(@RequestBody LoginRequest request) {
+<span class="fc" id="L33">        com.p2pledger.model.User user = authService.login(request.getIdentifier(), request.getPassword());</span>
+        
+<span class="fc" id="L35">        String token = jwtService.generateToken(user.getId(), user.getRole().name());</span>
+<span class="fc" id="L36">        int expiresIn = 3600;</span>
+        
+<span class="fc" id="L38">        Map&lt;String, Object&gt; response = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L39">        response.put(&quot;token&quot;, token);</span>
+<span class="fc" id="L40">        response.put(&quot;expiresIn&quot;, expiresIn);</span>
+<span class="fc" id="L41">        response.put(&quot;user&quot;, Map.of(</span>
+<span class="fc" id="L42">            &quot;id&quot;, user.getId(),</span>
+<span class="fc" id="L43">            &quot;name&quot;, user.getName(),</span>
+<span class="fc" id="L44">            &quot;role&quot;, user.getRole().name()</span>
+        ));
+<span class="fc" id="L46">        return ResponseEntity.ok(response);</span>
+    }
+
+<span class="fc" id="L49">    public static class RegisterRequest {</span>
+        private String name;
+        private String email;
+        private String phone;
+        private String password;
+        private String transactionPin;
+
+<span class="fc" id="L56">        public String getName() { return name; }</span>
+<span class="fc" id="L57">        public void setName(String name) { this.name = name; }</span>
+<span class="fc" id="L58">        public String getEmail() { return email; }</span>
+<span class="fc" id="L59">        public void setEmail(String email) { this.email = email; }</span>
+<span class="fc" id="L60">        public String getPhone() { return phone; }</span>
+<span class="fc" id="L61">        public void setPhone(String phone) { this.phone = phone; }</span>
+<span class="fc" id="L62">        public String getPassword() { return password; }</span>
+<span class="fc" id="L63">        public void setPassword(String password) { this.password = password; }</span>
+<span class="fc" id="L64">        public String getTransactionPin() { return transactionPin; }</span>
+<span class="fc" id="L65">        public void setTransactionPin(String transactionPin) { this.transactionPin = transactionPin; }</span>
+    }
+
+<span class="fc" id="L68">    public static class LoginRequest {</span>
+        private String identifier;
+        private String password;
+
+<span class="fc" id="L72">        public String getIdentifier() { return identifier; }</span>
+<span class="fc" id="L73">        public void setIdentifier(String identifier) { this.identifier = identifier; }</span>
+<span class="fc" id="L74">        public String getPassword() { return password; }</span>
+<span class="fc" id="L75">        public void setPassword(String password) { this.password = password; }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>
