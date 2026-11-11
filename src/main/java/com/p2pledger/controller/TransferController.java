@@ -67,7 +67,7 @@ public class TransferController {
     @GetMapping("/summary")
     public ResponseEntity<TransferService.TransferSummary> getSummary(Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
-        TransferService.TransferSummary summary = transferService.getTransferSummary(userId);
+       TransferService.TransferSummary summary = transferService.getTransferSummary(userId);
         return ResponseEntity.ok(summary);
     }
 
